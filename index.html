@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="MOTRIVEXA - Smart Predictive Health Monitoring and Protection System for Industrial Electric Motors. Real-time ESP32 Web Serial telemetry dashboard.">
+  <meta name="keywords" content="MOTRIVEXA, Industrial IoT, Motor Health Monitoring, ESP32, Web Serial API, Predictive Maintenance, Vibration Analysis">
+  <meta name="author" content="MOTRIVEXA Engineering Team">
+  <meta name="theme-color" content="#070a12">
+  <title>MOTRIVEXA | Smart Predictive Motor Health Monitoring System</title>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Chart.js for real-time industrial charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+  <!-- ================= TOP HEADER ================= -->
+  <header class="app-header" role="banner">
+    <div class="header-container">
+      <!-- Left: Brand & Motor Icon -->
+      <div class="brand-section">
+        <div class="brand-logo" aria-hidden="true">
+          <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3" opacity="0.6" />
+            <circle cx="16" cy="16" r="9" stroke="currentColor" stroke-width="2.5" />
+            <circle cx="16" cy="16" r="4" fill="currentColor" />
+            <path d="M16 2V7M16 25V30M2 16H7M25 16H30" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+            <path d="M6 6L9.5 9.5M22.5 22.5L26 26M6 26L9.5 22.5M22.5 9.5L26 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="brand-info">
+          <div class="brand-title-wrap">
+            <span class="brand-title">MOTRIVEXA</span>
+            <span class="brand-badge">IoT Core v1.2</span>
+          </div>
+          <span class="brand-subtitle">Smart Motor Intelligence</span>
+        </div>
+      </div>
+
+      <!-- Center: Official Title & Tagline -->
+      <div class="project-title-section">
+        <h1 class="project-main-title">SMART PREDICTIVE HEALTH MONITORING AND PROTECTION SYSTEM</h1>
+        <p class="project-tagline">Intelligent Monitoring. Predictive Insights. Safer Motors.</p>
+      </div>
+
+      <!-- Right: Connection Status & Baud indicator -->
+      <div class="header-status-section">
+        <div class="telemetry-chip">
+          <span class="chip-label">SERIAL SPEED</span>
+          <span class="chip-val mono">115200 Baud</span>
+        </div>
+        <div class="connection-indicator-pill" id="headerConnectionPill">
+          <span class="status-dot disconnected" id="headerStatusDot"></span>
+          <span class="status-text" id="headerStatusText">Disconnected</span>
+        </div>
+        <button type="button" class="icon-btn" id="openSettingsBtn" title="System Thresholds & Settings" aria-label="Open Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= BROWSER COMPATIBILITY BANNER ================= -->
+  <div class="alert-banner warning hidden" id="webSerialWarning" role="alert">
+    <div class="banner-content">
+      <svg class="banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <div>
+        <strong>Web Serial API Not Supported:</strong> Your current browser does not support Web Serial communication. Direct USB communication requires <strong>Google Chrome</strong>, <strong>Microsoft Edge</strong>, or <strong>Opera</strong> on Desktop (over HTTPS or localhost).
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STALE TELEMETRY ALERT ================= -->
+  <div class="alert-banner danger hidden" id="staleDataWarning" role="alert">
+    <div class="banner-content">
+      <svg class="banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      <div>
+        <strong>Stale Data Warning:</strong> No live serial telemetry received from the ESP32 for over <span id="staleTimeCount">4.0</span> seconds. Verify that the USB cable is firmly connected and the ESP32 is powered.
+      </div>
+    </div>
+  </div>
+
+  <main class="main-content" id="mainContent">
+    <!-- ================= SERIAL CONNECTION PANEL ================= -->
+    <section class="dashboard-panel connection-panel" aria-labelledby="connHeading">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 2v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V2"/>
+            <line x1="9" y1="2" x2="9" y2="5"/>
+            <line x1="15" y1="2" x2="15" y2="5"/>
+            <line x1="12" y1="15" x2="12" y2="22"/>
+          </svg>
+          <h2 id="connHeading">Serial Device Connection Hub</h2>
+        </div>
+        <div class="panel-quick-actions">
+          <button type="button" class="btn btn-outline btn-sm" id="toggleTerminalBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            <span id="terminalBtnLabel">Show Serial Console</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="connection-grid">
+        <!-- Control Buttons & Main Info -->
+        <div class="conn-main-col">
+          <div class="conn-buttons-group">
+            <button type="button" class="btn btn-primary" id="connectBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="10 8 16 12 10 16 10 8" />
+              </svg>
+              <span>Connect Device</span>
+            </button>
+            <button type="button" class="btn btn-danger-outline" id="disconnectBtn" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              <span>Disconnect</span>
+            </button>
+          </div>
+
+          <p class="connection-instructions" id="connInstructionText">
+            Connect your ESP32 through USB to begin live motor monitoring. Select the ESP32 COM / Serial port in the browser prompt.
+          </p>
+
+          <!-- Motor Hardware Control Bar (Sends 'F', 'R', 'S' through serial) -->
+          <div class="hardware-control-bar">
+            <span class="control-bar-label">Direct ESP32 Motor Commands:</span>
+            <div class="control-btns-wrap">
+              <button type="button" class="btn btn-cmd btn-cmd-fwd" id="cmdFwdBtn" disabled title="Send 'F' (Forward) to ESP32">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 4 15 12 5 20 5 4" />
+                  <line x1="19" y1="5" x2="19" y2="19" />
+                </svg>
+                <span>Forward (F)</span>
+              </button>
+              <button type="button" class="btn btn-cmd btn-cmd-rev" id="cmdRevBtn" disabled title="Send 'R' (Reverse) to ESP32">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="19 20 9 12 19 4 19 20" />
+                  <line x1="5" y1="19" x2="5" y2="5" />
+                </svg>
+                <span>Reverse (R)</span>
+              </button>
+              <button type="button" class="btn btn-cmd btn-cmd-stop" id="cmdStopBtn" disabled title="Send 'S' (Emergency Stop) to ESP32">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <rect x="9" y="9" width="6" height="6" />
+                </svg>
+                <span>Stop Motor (S)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connection Metadata Cards -->
+        <div class="conn-meta-col">
+          <div class="meta-item">
+            <span class="meta-label">Connection Status</span>
+            <span class="meta-value status-badge" id="connStatusBadge">Disconnected</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Selected Hardware Device</span>
+            <span class="meta-value mono" id="deviceInfoText">No Device Selected</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Stream Pipeline</span>
+            <span class="meta-value mono" id="streamPipelineText">Idle / Port Closed</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Last Successful Telemetry</span>
+            <span class="meta-value mono highlight" id="lastUpdateText">--:--:--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Collapsible Live Serial Console -->
+      <div class="serial-terminal-drawer hidden" id="serialTerminalDrawer">
+        <div class="terminal-header">
+          <div class="terminal-title">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-heading">Live Serial Stream & Firmware Logs (115200 Baud)</span>
+          </div>
+          <div class="terminal-controls">
+            <label class="terminal-checkbox">
+              <input type="checkbox" id="autoscrollCheck" checked>
+              <span>Auto-scroll</span>
+            </label>
+            <button type="button" class="terminal-btn" id="clearTerminalBtn">Clear Terminal</button>
+          </div>
+        </div>
+        <div class="terminal-body" id="terminalOutput" role="log" aria-live="polite">
+          <div class="terminal-line system">[MOTRIVEXA Terminal Initialized] Waiting for USB serial connection...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= MOTOR HERO STATUS PANEL ================= -->
+    <section class="dashboard-panel motor-hero-panel" aria-labelledby="motorHeading">
+      <div class="motor-hero-grid">
+        <!-- Motor Direction Visualizer -->
+        <div class="motor-visual-col">
+          <div class="motor-rotor-housing" id="motorHousing">
+            <div class="motor-stator-ring"></div>
+            <!-- Technical Rotating Motor SVG Graphic -->
+            <svg class="motor-rotor-svg" id="motorRotorSvg" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="46" stroke="#1e293b" stroke-width="4" fill="none" />
+              <!-- Pole Windings -->
+              <circle cx="50" cy="12" r="5" fill="#38bdf8" opacity="0.8" />
+              <circle cx="50" cy="88" r="5" fill="#38bdf8" opacity="0.8" />
+              <circle cx="12" cy="50" r="5" fill="#38bdf8" opacity="0.8" />
+              <circle cx="88" cy="50" r="5" fill="#38bdf8" opacity="0.8" />
+              <!-- Rotor Shaft & Blades -->
+              <g class="rotor-blades" id="rotorBladesGroup">
+                <circle cx="50" cy="50" r="28" stroke="#00e5ff" stroke-width="2" fill="#0f172a" />
+                <line x1="50" y1="24" x2="50" y2="76" stroke="#00e5ff" stroke-width="4" stroke-linecap="round" />
+                <line x1="24" y1="50" x2="76" y2="50" stroke="#00e5ff" stroke-width="4" stroke-linecap="round" />
+                <circle cx="50" cy="50" r="10" fill="#38bdf8" />
+                <circle cx="50" cy="50" r="4" fill="#0f172a" />
+                <path d="M50 24L56 34H44L50 24Z" fill="#00e5ff" />
+                <path d="M50 76L44 66H56L50 76Z" fill="#00e5ff" />
+              </g>
+            </svg>
+            <div class="motor-direction-overlay" id="motorDirectionOverlay">STOPPED</div>
+          </div>
+        </div>
+
+        <!-- Motor Metrics Summary -->
+        <div class="motor-info-col">
+          <div class="hero-header-row">
+            <div>
+              <span class="sub-badge">ACTUATOR TELEMETRY</span>
+              <h2 id="motorHeading" class="motor-title">Industrial Induction Motor Core</h2>
+            </div>
+            <div class="motor-status-pill" id="motorStatusPill">
+              <span class="pill-dot" id="motorPillDot"></span>
+              <span id="motorStateText">STOP</span>
+            </div>
+          </div>
+
+          <div class="motor-submetrics-grid">
+            <div class="submetric-card">
+              <span class="submetric-label">OPERATING MODE</span>
+              <span class="submetric-val" id="motorDirectionText">STOPPED (IDLE)</span>
+              <span class="submetric-hint">Direction Controlled via L298N</span>
+            </div>
+            <div class="submetric-card">
+              <span class="submetric-label">PWM DRIVE LEVEL</span>
+              <span class="submetric-val mono" id="motorPwmText">200 / 255 (78%)</span>
+              <span class="submetric-hint">ENA Pin 25 Duty Cycle</span>
+            </div>
+            <div class="submetric-card">
+              <span class="submetric-label">FAILSAFE BUZZER</span>
+              <span class="submetric-val" id="motorBuzzerState">OFF</span>
+              <span class="submetric-hint">GPIO 33 Active Protection</span>
+            </div>
+            <div class="submetric-card">
+              <span class="submetric-label">OVERALL HEALTH STATUS</span>
+              <span class="submetric-val healthy" id="motorHealthSummary">SYSTEM HEALTHY</span>
+              <span class="submetric-hint">Continuous Rule Evaluation</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PRIMARY SENSOR CARDS ================= -->
+    <section class="section-container" aria-label="Primary Sensor Telemetry">
+      <div class="section-title-wrap">
+        <h3>Electrical & Mechanical Sensors</h3>
+        <span class="section-subtitle">Real-time parameters streamed directly from INA219, MPU6050 & KY-024</span>
+      </div>
+
+      <div class="sensor-cards-grid">
+        <!-- 1. Voltage Card (INA219) -->
+        <article class="sensor-card" id="voltageCard">
+          <div class="sensor-card-header">
+            <div class="sensor-title-group">
+              <div class="sensor-icon-box voltage">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+              </div>
+              <div>
+                <h4>Bus Voltage</h4>
+                <span class="sensor-tag">INA219 Power Monitor</span>
+              </div>
+            </div>
+            <span class="state-badge normal" id="voltageBadge">NORMAL</span>
+          </div>
+
+          <div class="sensor-value-box">
+            <span class="primary-val mono" id="voltageVal">--.--</span>
+            <span class="unit">V</span>
+          </div>
+
+          <div class="card-bar-wrapper">
+            <div class="bar-labels">
+              <span>Min: <span id="vMinThreshold">8.0</span>V</span>
+              <span>Bus Bar Gauge</span>
+              <span>Max: <span id="vMaxThreshold">13.0</span>V</span>
+            </div>
+            <div class="metric-progress-bar">
+              <div class="bar-fill voltage-fill" id="voltageBarFill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensor-footer-meta">
+            <span class="meta-key">Shunt Voltage:</span>
+            <span class="meta-val mono" id="shuntVoltageVal">--.-- mV</span>
+          </div>
+        </article>
+
+        <!-- 2. Current Card (INA219) -->
+        <article class="sensor-card" id="currentCard">
+          <div class="sensor-card-header">
+            <div class="sensor-title-group">
+              <div class="sensor-icon-box current">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+              </div>
+              <div>
+                <h4>Load Current</h4>
+                <span class="sensor-tag">INA219 Shunt Resistor</span>
+              </div>
+            </div>
+            <span class="state-badge normal" id="currentBadge">NORMAL</span>
+          </div>
+
+          <div class="sensor-value-box">
+            <span class="primary-val mono" id="currentVal">--.-</span>
+            <span class="unit">mA</span>
+          </div>
+
+          <div class="card-bar-wrapper">
+            <div class="bar-labels">
+              <span>0 mA</span>
+              <span>Trip Limit: <span id="cMaxThreshold">750.0</span> mA</span>
+              <span>1000 mA</span>
+            </div>
+            <div class="metric-progress-bar">
+              <div class="bar-fill current-fill" id="currentBarFill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensor-footer-meta">
+            <span class="meta-key">Equivalent in Amperes:</span>
+            <span class="meta-val mono highlight" id="currentAmpVal">-.--- A</span>
+          </div>
+        </article>
+
+        <!-- 3. Power Card (INA219) -->
+        <article class="sensor-card" id="powerCard">
+          <div class="sensor-card-header">
+            <div class="sensor-title-group">
+              <div class="sensor-icon-box power">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+              </div>
+              <div>
+                <h4>Power Consumption</h4>
+                <span class="sensor-tag">V × I Dissipation</span>
+              </div>
+            </div>
+            <span class="state-badge normal" id="powerBadge">NORMAL</span>
+          </div>
+
+          <div class="sensor-value-box">
+            <span class="primary-val mono" id="powerVal">--.-</span>
+            <span class="unit">mW</span>
+          </div>
+
+          <div class="card-bar-wrapper">
+            <div class="bar-labels">
+              <span>0 mW</span>
+              <span>Continuous Dissipation</span>
+              <span>12000 mW</span>
+            </div>
+            <div class="metric-progress-bar">
+              <div class="bar-fill power-fill" id="powerBarFill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensor-footer-meta">
+            <span class="meta-key">Power in Watts (W):</span>
+            <span class="meta-val mono highlight" id="powerWattVal">-.--- W</span>
+          </div>
+        </article>
+
+        <!-- 4. Vibration Monitoring Card (MPU6050) -->
+        <article class="sensor-card" id="vibrationCard">
+          <div class="sensor-card-header">
+            <div class="sensor-title-group">
+              <div class="sensor-icon-box vibration">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M2 12h3l2-6 4 12 4-12 2 6h3"/>
+                </svg>
+              </div>
+              <div>
+                <h4>Vibration Health</h4>
+                <span class="sensor-tag">MPU6050 3-Axis Accel</span>
+              </div>
+            </div>
+            <span class="state-badge normal" id="vibrationBadge">NORMAL</span>
+          </div>
+
+          <div class="sensor-value-box">
+            <span class="primary-val mono" id="vibrationScoreVal">--</span>
+            <span class="unit">Score</span>
+          </div>
+
+          <div class="card-bar-wrapper">
+            <div class="bar-labels">
+              <span>0</span>
+              <span>Alert Threshold: <span id="vibThreshold">124</span></span>
+              <span>250</span>
+            </div>
+            <div class="metric-progress-bar">
+              <div class="bar-fill vibration-fill" id="vibrationBarFill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensor-footer-meta">
+            <span class="meta-key">Vibration RMS:</span>
+            <span class="meta-val mono" id="vibrationRmsVal">-.---- g</span>
+          </div>
+          <p class="sensor-disclaimer">
+            *Prototype metric derived from 3-axis magnitude variance. Requires baseline calibration for ISO 10816 standards.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= TEMPERATURE & ENVIRONMENT CARDS ================= -->
+    <section class="section-container" aria-label="Thermal & Environmental Telemetry">
+      <div class="section-title-wrap">
+        <h3>Thermal & Environmental Monitoring</h3>
+        <span class="section-subtitle">Dual-temperature zone telemetry: Direct motor contact probe vs ambient surroundings</span>
+      </div>
+
+      <div class="sensor-cards-grid triple">
+        <!-- 5. Motor Contact Temperature (DS18B20) -->
+        <article class="sensor-card" id="motorTempCard">
+          <div class="sensor-card-header">
+            <div class="sensor-title-group">
+              <div class="sensor-icon-box temp-motor">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                </svg>
+              </div>
+              <div>
+                <h4>Motor Temperature — DS18B20</h4>
+                <span class="sensor-tag">Contact Thermal Probe (GPIO 4)</span>
+              </div>
+            </div>
+            <span class="state-badge normal" id="motorTempBadge">NORMAL</span>
+          </div>
+
+          <div class="sensor-value-box">
+            <span class="primary-val mono" id="motorTempVal">--.-</span>
+            <span class="unit">°C</span>
+          </div>
+
+          <div class="card-bar-wrapper">
+            <div class="bar-labels">
+              <span>Ambient</span>
+              <span>Warn: <span id="tWarnThreshold">60</span>°C</span>
+              <span>Crit: <span id="tCritThreshold">70</span>°C</span>
+            </div>
+            <div class="metric-progress-bar">
+              <div class="bar-fill temp-fill" id="motorTempBarFill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensor-footer-meta">
+            <span class="meta-key">Thermal Zone:</span>
+            <span class="meta-val" id="motorTempZone">Casing / Stator Core</span>
+          </div>
+        </article>
+
+        <!-- 6. Ambient Temperature (DHT11) -->
+        <article class="sensor-card" id="ambientTempCard">
+          <div class="sensor-card-header">
+            <div class="sensor-title-group">
+              <div class="sensor-icon-box temp-ambient">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="5"/>
+                  <line x1="12" y1="1" x2="12" y2="3"/>
+                  <line x1="12" y1="21" x2="12" y2="23"/>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                  <line x1="1" y1="12" x2="3" y2="12"/>
+                  <line x1="21" y1="12" x2="23" y2="12"/>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                </svg>
+              </div>
+              <div>
+                <h4>Ambient Temperature — DHT11</h4>
+                <span class="sensor-tag">Surrounding Enclosure (GPIO 18)</span>
+              </div>
+            </div>
+            <span class="state-badge normal" id="ambientTempBadge">NORMAL</span>
+          </div>
+
+          <div class="sensor-value-box">
+            <span class="primary-val mono" id="ambientTempVal">--.-</span>
+            <span class="unit">°C</span>
+          </div>
+
+          <div class="card-bar-wrapper">
+            <div class="bar-labels">
+              <span>0 °C</span>
+              <span>Operating Ambient</span>
+              <span>50 °C</span>
+            </div>
+            <div class="metric-progress-bar">
+              <div class="bar-fill ambient-fill" id="ambientTempBarFill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensor-footer-meta">
+            <span class="meta-key">Delta T (Motor - Amb):</span>
+            <span class="meta-val mono" id="deltaTempVal">--.- °C</span>
+          </div>
+        </article>
+
+        <!-- 7. Ambient Humidity (DHT11) -->
+        <article class="sensor-card" id="humidityCard">
+          <div class="sensor-card-header">
+            <div class="sensor-title-group">
+              <div class="sensor-icon-box humidity">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+                </svg>
+              </div>
+              <div>
+                <h4>Ambient Humidity — DHT11</h4>
+                <span class="sensor-tag">Atmospheric Relative Humidity</span>
+              </div>
+            </div>
+            <span class="state-badge normal" id="humidityBadge">NORMAL</span>
+          </div>
+
+          <div class="sensor-value-box">
+            <span class="primary-val mono" id="humidityVal">--.-</span>
+            <span class="unit">%</span>
+          </div>
+
+          <div class="card-bar-wrapper">
+            <div class="bar-labels">
+              <span>20% (Dry)</span>
+              <span>Safe Zone (30% - 70%)</span>
+              <span>90% (Condensation)</span>
+            </div>
+            <div class="metric-progress-bar">
+              <div class="bar-fill humidity-fill" id="humidityBarFill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensor-footer-meta">
+            <span class="meta-key">Atmospheric Condition:</span>
+            <span class="meta-val" id="humidityCondText">Nominal</span>
+          </div>
+        </article>
+      </div>
+
+      <!-- KY-024 Hall Effect Sensor Secondary Row -->
+      <div class="sensor-cards-grid single-wide">
+        <!-- 8. KY-024 Magnetic Sensor -->
+        <article class="sensor-card horizontal" id="ky024Card">
+          <div class="sensor-card-header">
+            <div class="sensor-title-group">
+              <div class="sensor-icon-box magnetic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 3v7a6 6 0 0 0 12 0V3"/>
+                  <line x1="4" y1="7" x2="8" y2="7"/>
+                  <line x1="16" y1="7" x2="20" y2="7"/>
+                </svg>
+              </div>
+              <div>
+                <h4>KY-024 Magnetic Sensor</h4>
+                <span class="sensor-tag">Analog Hall Effect Sensor (GPIO 34 ADC1)</span>
+              </div>
+            </div>
+            <span class="state-badge normal" id="ky024Badge">ACTIVE</span>
+          </div>
+
+          <div class="horizontal-body">
+            <div class="sensor-value-box">
+              <span class="sub-label">Analog Reading:</span>
+              <span class="primary-val mono" id="ky024Val">----</span>
+              <span class="unit">ADC (12-bit)</span>
+            </div>
+
+            <div class="ky024-meta-wrap">
+              <div class="card-bar-wrapper">
+                <div class="bar-labels">
+                  <span>0</span>
+                  <span>12-Bit ADC Range (0 - 4095)</span>
+                  <span>4095</span>
+                </div>
+                <div class="metric-progress-bar">
+                  <div class="bar-fill magnetic-fill" id="ky024BarFill" style="width: 0%;"></div>
+                </div>
+              </div>
+              <p class="sensor-disclaimer">
+                *Note: This raw ADC reading measures magnetic flux changes from the Hall element. It is <strong>not rotational RPM</strong>. Future speed calculation will implement interrupt-driven pulse counting and tachometer calibration.
+              </p>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= ALERT & PROTECTION CENTER ================= -->
+    <section class="dashboard-panel alert-center-panel" aria-labelledby="alertCenterHeading">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <svg class="section-icon alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <h2 id="alertCenterHeading">Predictive Health & Protection Center</h2>
+        </div>
+        <div class="alarm-audio-toggle">
+          <label class="toggle-switch">
+            <input type="checkbox" id="audioAlarmToggle">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Browser Audio Alarm</span>
+        </div>
+      </div>
+
+      <!-- Real-Time Rule Check Matrix -->
+      <div class="alert-matrix-grid">
+        <div class="alert-check-card" id="alertCheckVib">
+          <div class="alert-check-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M2 12h3l2-6 4 12 4-12 2 6h3"/>
+            </svg>
+          </div>
+          <div class="alert-check-info">
+            <span class="check-title">VIBRATION ANOMALY</span>
+            <span class="check-status normal" id="alertVibStatus">NORMAL</span>
+            <p class="check-desc" id="alertVibDesc">Vibration score within acceptable operational tolerances (&le; 124).</p>
+          </div>
+        </div>
+
+        <div class="alert-check-card" id="alertCheckVolt">
+          <div class="alert-check-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
+          <div class="alert-check-info">
+            <span class="check-title">VOLTAGE BOUNDS</span>
+            <span class="check-status normal" id="alertVoltStatus">NORMAL</span>
+            <p class="check-desc" id="alertVoltDesc">Bus supply voltage within rated operating window (8.0V - 13.0V).</p>
+          </div>
+        </div>
+
+        <div class="alert-check-card" id="alertCheckCurr">
+          <div class="alert-check-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </div>
+          <div class="alert-check-info">
+            <span class="check-title">OVERCURRENT PROTECTION</span>
+            <span class="check-status normal" id="alertCurrStatus">NORMAL</span>
+            <p class="check-desc" id="alertCurrDesc">Load current below the maximum continuous limit (&le; 750.0 mA).</p>
+          </div>
+        </div>
+
+        <div class="alert-check-card" id="alertCheckTemp">
+          <div class="alert-check-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+            </svg>
+          </div>
+          <div class="alert-check-info">
+            <span class="check-title">THERMAL OVERLOAD</span>
+            <span class="check-status normal" id="alertTempStatus">NORMAL</span>
+            <p class="check-desc" id="alertTempDesc">DS18B20 motor contact temperature below warning threshold (&le; 60.0°C).</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="protection-notice-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+        <p>
+          <strong>Hardware Protection Protocol:</strong> The physical piezo buzzer is managed autonomously by the on-board ESP32 firmware running at 115200 baud. The website acts as a high-fidelity monitoring interface and does not replace hardware protection failsafes.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= LIVE CHARTS SECTION ================= -->
+    <section class="dashboard-panel charts-section" aria-labelledby="chartsHeading">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M3 9h18M9 21V9" />
+          </svg>
+          <h2 id="chartsHeading">Live Telemetry Waveforms & Historical Trends</h2>
+        </div>
+        <div class="chart-controls">
+          <button type="button" class="btn btn-outline btn-sm" id="pauseChartsBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="4" width="4" height="16" />
+              <rect x="14" y="4" width="4" height="16" />
+            </svg>
+            <span id="pauseChartsLabel">Pause Charts</span>
+          </button>
+          <span class="chart-sample-badge">Last 60 Samples</span>
+        </div>
+      </div>
+
+      <!-- Charts Grid -->
+      <div class="charts-grid">
+        <!-- Chart 1: Electrical (Voltage & Current) -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Electrical Parameters (Voltage & Current)</h3>
+            <div class="chart-legend-custom">
+              <span class="legend-dot cyan"></span><span>Voltage (V)</span>
+              <span class="legend-dot amber"></span><span>Current (mA)</span>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="electricalChart" aria-label="Voltage and Current real-time chart" role="img"></canvas>
+            <div class="chart-empty-state" id="electricalChartEmpty">
+              <span>Connect ESP32 via USB to stream real-time electrical data</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart 2: Power Dissipation -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Power Dissipation Trend (mW)</h3>
+            <div class="chart-legend-custom">
+              <span class="legend-dot violet"></span><span>Power (mW)</span>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="powerChart" aria-label="Power dissipation real-time chart" role="img"></canvas>
+            <div class="chart-empty-state" id="powerChartEmpty">
+              <span>Connect ESP32 via USB to stream power dissipation</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart 3: Thermal Profile (Motor vs Ambient) -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Thermal Profile: Motor (DS18B20) vs Ambient (DHT11)</h3>
+            <div class="chart-legend-custom">
+              <span class="legend-dot red"></span><span>Motor (°C)</span>
+              <span class="legend-dot emerald"></span><span>Ambient (°C)</span>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="thermalChart" aria-label="Thermal profile real-time chart" role="img"></canvas>
+            <div class="chart-empty-state" id="thermalChartEmpty">
+              <span>Connect ESP32 via USB to stream temperature data</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart 4: Mechanical Vibration & Humidity -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Vibration Anomaly & Relative Humidity</h3>
+            <div class="chart-legend-custom">
+              <span class="legend-dot blue"></span><span>Vibration Score</span>
+              <span class="legend-dot teal"></span><span>Humidity (%)</span>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="vibrationChart" aria-label="Vibration and humidity real-time chart" role="img"></canvas>
+            <div class="chart-empty-state" id="vibrationChartEmpty">
+              <span>Connect ESP32 via USB to stream mechanical vibration</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= RECENT TELEMETRY TABLE ================= -->
+    <section class="dashboard-panel telemetry-table-panel" aria-labelledby="tableHeading">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"/>
+            <line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/>
+            <line x1="3" y1="12" x2="3.01" y2="12"/>
+            <line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          <h2 id="tableHeading">Live Session Telemetry Log</h2>
+        </div>
+        <div class="table-actions">
+          <span class="session-count-badge" id="telemetryCountBadge">0 Records</span>
+          <button type="button" class="btn btn-outline btn-sm" id="exportCsvBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>Export CSV</span>
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" id="clearTableBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            <span>Clear Session</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive-wrapper">
+        <table class="telemetry-table" id="telemetryTable" aria-label="Recent ESP32 sensor telemetry records">
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Time</th>
+              <th scope="col">Motor</th>
+              <th scope="col">Voltage (V)</th>
+              <th scope="col">Current (mA)</th>
+              <th scope="col">Power (mW)</th>
+              <th scope="col">Motor T (°C)</th>
+              <th scope="col">Amb T (°C)</th>
+              <th scope="col">Humidity (%)</th>
+              <th scope="col">Vib Score</th>
+              <th scope="col">KY-024 ADC</th>
+              <th scope="col">Buzzer</th>
+            </tr>
+          </thead>
+          <tbody id="telemetryTableBody">
+            <tr class="empty-row" id="tableEmptyRow">
+              <td colspan="12">Waiting for ESP32 connection. Telemetry records will stream here in real time.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= SETTINGS & THRESHOLDS MODAL ================= -->
+  <div class="modal-backdrop hidden" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          <h3 id="settingsTitle">Threshold & Telemetry Settings</h3>
+        </div>
+        <button type="button" class="modal-close-btn" id="closeSettingsBtn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="modal-intro">
+          Configure telemetry alert boundaries. Defaults mirror the active ESP32 firmware protection limits. Settings are stored locally in the browser session.
+        </p>
+
+        <form id="settingsForm" class="settings-form">
+          <div class="settings-grid">
+            <div class="form-group">
+              <label for="settingVoltMin">Voltage Low Limit (V)</label>
+              <input type="number" id="settingVoltMin" step="0.1" value="8.0" required>
+              <span class="field-hint">Firmware initial: 8.0 V</span>
+            </div>
+
+            <div class="form-group">
+              <label for="settingVoltMax">Voltage High Limit (V)</label>
+              <input type="number" id="settingVoltMax" step="0.1" value="13.0" required>
+              <span class="field-hint">Firmware initial: 13.0 V</span>
+            </div>
+
+            <div class="form-group">
+              <label for="settingCurrMax">Current Warning (mA)</label>
+              <input type="number" id="settingCurrMax" step="10" value="750.0" required>
+              <span class="field-hint">Firmware initial: 750.0 mA</span>
+            </div>
+
+            <div class="form-group">
+              <label for="settingVibMax">Vibration Score Warning</label>
+              <input type="number" id="settingVibMax" step="1" value="124" required>
+              <span class="field-hint">Firmware initial: 124</span>
+            </div>
+
+            <div class="form-group">
+              <label for="settingTempWarn">Motor Temp Warning (°C)</label>
+              <input type="number" id="settingTempWarn" step="1" value="60.0" required>
+              <span class="field-hint">Firmware initial: 60.0 °C</span>
+            </div>
+
+            <div class="form-group">
+              <label for="settingTempCrit">Motor Temp Critical (°C)</label>
+              <input type="number" id="settingTempCrit" step="1" value="70.0" required>
+              <span class="field-hint">Firmware initial: 70.0 °C</span>
+            </div>
+
+            <div class="form-group">
+              <label for="settingStaleTimeout">Stale Telemetry Timeout (s)</label>
+              <input type="number" id="settingStaleTimeout" step="0.5" min="2" max="30" value="4.0" required>
+              <span class="field-hint">Trigger stale warning if no packet received</span>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline" id="resetDefaultsBtn">Reset to Defaults</button>
+            <div class="modal-save-actions">
+              <button type="button" class="btn btn-outline" id="cancelSettingsBtn">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save Settings</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="app-footer" role="contentinfo">
+    <div class="footer-container">
+      <div class="footer-left">
+        <strong>MOTRIVEXA</strong> &mdash; Smart Predictive Health Monitoring and Protection System for Industrial Electric Motors
+      </div>
+      <div class="footer-right">
+        <span>Hardware: ESP32 + INA219 + MPU6050 + DS18B20 + DHT11 + KY-024</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Main JavaScript Controller -->
+  <script src="static/script.js"></script>
+</body>
+</html>
