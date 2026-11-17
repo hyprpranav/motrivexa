@@ -50,14 +50,14 @@ MOTRIVEXA/
 | Component | Pin / Bus | ESP32 GPIO | Description |
 | :--- | :--- | :--- | :--- |
 | **DS18B20 Temp Probe** | OneWire | **GPIO 4** | Motor contact thermal measurement |
-| **DHT11 Sensor** | Data | **GPIO 18** | Ambient temp & relative humidity |
+| **DHT11 Sensor** | Data | **GPIO 14** | Ambient temp & relative humidity |
+| **IR Speed Sensor** | Digital / Interrupt | **GPIO 32** | Optical tachometer pulse counter (RPM) |
 | **KY-024 Hall Sensor** | Analog Out (AO) | **GPIO 34** | 12-bit ADC1 input (magnetic flux) |
 | **L298N Motor Driver** | ENA (PWM) | **GPIO 25** | Motor PWM speed drive |
 | **L298N Motor Driver** | IN1 (Dir 1) | **GPIO 26** | Direction logic |
 | **L298N Motor Driver** | IN2 (Dir 2) | **GPIO 27** | Direction logic |
-| **Active Buzzer** | Control | **GPIO 33** | Hardware alert buzzer output |
-| **I2C Bus Data** | SDA | **GPIO 21** | INA219, SSD1306 OLED, MPU6050 |
-| **I2C Bus Clock** | SCL | **GPIO 22** | INA219, SSD1306 OLED, MPU6050 |
+| **INA219 I2C Data** | SDA | **GPIO 21** | Voltage, Current & Power monitoring |
+| **INA219 I2C Clock** | SCL | **GPIO 22** | Voltage, Current & Power monitoring |
 
 ---
 

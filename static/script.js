@@ -9,6 +9,325 @@
 (() => {
   'use strict';
 
+  // ================= ESP32 PRODUCTION FIRMWARE CODE =================
+  const FIRMWARE_CODE = `#include <Wire.h>
+#include <Adafruit_INA219.h>
+#include <DHT.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// ========== PIN CONFIGURATION ==========
+#define ENA 25
+#define IN1 26
+#define IN2 27
+
+#define IR_PIN 32
+#define KY024_PIN 34
+
+#define DHT_PIN 14
+#define DHT_TYPE DHT11
+
+#define DS18B20_PIN 4
+
+// ========== SENSOR OBJECTS ==========
+Adafruit_INA219 ina219;
+DHT dht(DHT_PIN, DHT_TYPE);
+
+OneWire oneWire(DS18B20_PIN);
+DallasTemperature ds18b20(&oneWire);
+
+bool ina219OK = false;
+
+// ========== MOTOR CONTROL ==========
+bool motorON = false;
+int motorSpeed = 255;
+
+// ========== RPM SETTINGS ==========
+const int PULSES_PER_REVOLUTION = 1;
+
+// Reject electrical noise / repeated edges.
+// 2000 us supports up to 30,000 RPM with one mark.
+const unsigned long MIN_PULSE_GAP_US = 2000;
+
+// Measure over 2 seconds for more stable readings.
+const unsigned long RPM_WINDOW_MS = 2000;
+
+// Hold last RPM briefly if a pulse is missed.
+const unsigned long ZERO_TIMEOUT_MS = 1500;
+
+volatile unsigned long pulseCount = 0;
+volatile unsigned long lastPulseMicros = 0;
+
+unsigned long previousRPMTime = 0;
+unsigned long lastValidPulseTime = 0;
+
+float rpm = 0;
+unsigned long pulsesPerWindow = 0;
+
+// ========== SENSOR VALUES ==========
+float voltage = 0;
+float current = 0;
+float power = 0;
+
+float motorTemp = 0;
+float ambientTemp = 0;
+float humidity = 0;
+
+int ky024Raw = 0;
+int vibrationScore = 0;
+
+unsigned long previousSensorTime = 0;
+const unsigned long SENSOR_INTERVAL = 2000;
+
+// ========== IR INTERRUPT ==========
+void IRAM_ATTR countPulse() {
+  unsigned long currentMicros = micros();
+
+  if (currentMicros - lastPulseMicros >= MIN_PULSE_GAP_US) {
+    pulseCount++;
+    lastPulseMicros = currentMicros;
+  }
+}
+
+// ========== MOTOR START ==========
+void motorStart() {
+  motorON = true;
+
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  analogWrite(ENA, motorSpeed);
+
+  Serial.println("MOTOR ON");
+}
+
+// ========== MOTOR STOP ==========
+void motorStop() {
+  motorON = false;
+
+  analogWrite(ENA, 0);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+
+  vibrationScore = 0;
+  ky024Raw = 0;
+
+  Serial.println("MOTOR OFF");
+}
+
+// ========== SERIAL COMMANDS ==========
+void checkCommands() {
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\\n');
+    command.trim();
+    command.toUpperCase();
+
+    if (command == "ON" || command == "F" || command == "START") {
+      motorStart();
+    }
+    else if (command == "OFF" || command == "S" || command == "STOP") {
+      motorStop();
+    }
+    else if (command == "STATUS") {
+      Serial.print("MOTOR STATUS: ");
+      Serial.println(motorON ? "ON" : "OFF");
+
+      Serial.print("RPM: ");
+      Serial.println((int)rpm);
+    }
+    else if (command == "HELP") {
+      Serial.println("ON - START MOTOR");
+      Serial.println("OFF - STOP MOTOR");
+      Serial.println("STATUS - MOTOR STATUS");
+      Serial.println("HELP - COMMAND LIST");
+    }
+    else {
+      Serial.println("INVALID COMMAND");
+    }
+  }
+}
+
+// ========== RPM CALCULATION ==========
+void calculateRPM(unsigned long now) {
+  if (now - previousRPMTime >= RPM_WINDOW_MS) {
+
+    noInterrupts();
+    unsigned long pulses = pulseCount;
+    pulseCount = 0;
+    interrupts();
+
+    pulsesPerWindow = pulses;
+
+    if (pulses > 0) {
+      // Actual RPM from pulse count and measurement time.
+      rpm = (pulses * 60000.0) /
+            (RPM_WINDOW_MS * PULSES_PER_REVOLUTION);
+
+      lastValidPulseTime = now;
+    }
+    else {
+      // Do not immediately drop RPM to zero.
+      if (now - lastValidPulseTime >= ZERO_TIMEOUT_MS) {
+        rpm = 0;
+      }
+    }
+
+    previousRPMTime = now;
+  }
+
+  // Stop condition: after motor is stopped, RPM becomes zero.
+  if (!motorON && now - lastValidPulseTime >= ZERO_TIMEOUT_MS) {
+    rpm = 0;
+  }
+}
+
+// ========== SETUP ==========
+void setup() {
+  Serial.begin(115200);
+  Serial.setTimeout(20);
+
+  Wire.begin(21, 22);
+
+  pinMode(ENA, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+
+  pinMode(IR_PIN, INPUT_PULLUP);
+  pinMode(KY024_PIN, INPUT);
+
+  attachInterrupt(
+    digitalPinToInterrupt(IR_PIN),
+    countPulse,
+    FALLING
+  );
+
+  dht.begin();
+
+  ds18b20.begin();
+  ds18b20.setResolution(9);
+
+  ina219OK = ina219.begin();
+
+  motorStop();
+
+  randomSeed(micros());
+
+  previousRPMTime = millis();
+  previousSensorTime = millis();
+
+  Serial.println();
+  Serial.println("ESP32 MOTOR MONITORING SYSTEM");
+  Serial.println(ina219OK ? "INA219 CONNECTED" : "INA219 NOT FOUND");
+  Serial.println("DS18B20 INITIALIZED");
+  Serial.println("DHT11 INITIALIZED");
+  Serial.println("IR SENSOR INITIALIZED");
+  Serial.println("KY-024 INITIALIZED");
+  Serial.println("ONE REFLECTIVE MARK = ONE REVOLUTION");
+  Serial.println("TYPE ON / OFF / STATUS / HELP");
+}
+
+// ========== MAIN LOOP ==========
+void loop() {
+  checkCommands();
+
+  unsigned long now = millis();
+
+  // RPM calculation
+  calculateRPM(now);
+
+  // ========== SENSOR READING ==========
+  if (now - previousSensorTime >= SENSOR_INTERVAL) {
+    previousSensorTime = now;
+
+    // INA219
+    if (ina219OK) {
+      voltage = ina219.getBusVoltage_V();
+      current = ina219.getCurrent_mA() / 1000.0;
+      power = ina219.getPower_mW() / 1000.0;
+    }
+
+    // DS18B20
+    ds18b20.requestTemperatures();
+    float temp = ds18b20.getTempCByIndex(0);
+
+    if (temp != DEVICE_DISCONNECTED_C) {
+      motorTemp = temp;
+    }
+
+    // DHT11
+    float tempDHT = dht.readTemperature();
+    float humDHT = dht.readHumidity();
+
+    if (!isnan(tempDHT)) {
+      ambientTemp = tempDHT;
+    }
+
+    if (!isnan(humDHT)) {
+      humidity = humDHT;
+    }
+
+    // KY-024 AO
+    ky024Raw = motorON ? analogRead(KY024_PIN) : 0;
+
+    // Existing vibration score behavior
+    if (motorON) {
+      vibrationScore = random(50, 101);
+    }
+    else {
+      vibrationScore = 0;
+    }
+  }
+
+  // ========== SERIAL OUTPUT ==========
+  static unsigned long previousPrintTime = 0;
+
+  if (now - previousPrintTime >= 1000) {
+    previousPrintTime = now;
+
+    Serial.println();
+    Serial.println("========== MOTOR MONITORING SYSTEM ==========");
+
+    Serial.print("VOLTAGE              : ");
+    Serial.print(voltage, 2);
+    Serial.println(" V");
+
+    Serial.print("CURRENT              : ");
+    Serial.print(current, 3);
+    Serial.println(" A");
+
+    Serial.print("POWER                : ");
+    Serial.print(power, 2);
+    Serial.println(" W");
+
+    Serial.print("MOTOR TEMPERATURE    : ");
+    Serial.print(motorTemp, 2);
+    Serial.println(" C");
+
+    Serial.print("AMBIENT TEMPERATURE  : ");
+    Serial.print(ambientTemp, 2);
+    Serial.println(" C");
+
+    Serial.print("HUMIDITY             : ");
+    Serial.print(humidity, 1);
+    Serial.println(" %");
+
+    Serial.print("IR PULSES PER WINDOW : ");
+    Serial.println(pulsesPerWindow);
+
+    Serial.print("RPM                  : ");
+    Serial.println((int)rpm);
+
+    Serial.print("KY024 AO RAW         : ");
+    Serial.println(ky024Raw);
+
+    Serial.print("VIBRATION SCORE      : ");
+    Serial.print(vibrationScore);
+    Serial.println(" mg");
+
+    Serial.print("MOTOR STATUS         : ");
+    Serial.println(motorON ? "ON" : "OFF");
+  }
+}`;
+
   // ================= CONFIGURATION & CONSTANTS =================
   const DEFAULT_SETTINGS = {
     voltMin: 8.0,
@@ -39,6 +358,27 @@
   let isAudioAlarmEnabled = false;
   let lastBeepTime = 0;
 
+  // Current parsed sensor state from ESP32
+  let currentTelemetry = {
+    voltage: 0.0,
+    current: 0.0,      // in A
+    current_mA: 0.0,   // in mA
+    power: 0.0,        // in W
+    power_mW: 0.0,     // in mW
+    motorTemperature: null,
+    ambientTemperature: null,
+    humidity: null,
+    irPulses: 0,
+    rpm: 0,
+    ky024Raw: 0,
+    vibrationScore: 0,
+    motor: 'OFF',
+    buzzer: 'OFF'
+  };
+
+  let telemetryCommitTimer = null;
+  let currentTheme = 'dark';
+
   // Chart.js Instances
   let electricalChart = null;
   let powerChart = null;
@@ -50,6 +390,9 @@
     // Header & Global
     headerStatusDot: document.getElementById('headerStatusDot'),
     headerStatusText: document.getElementById('headerStatusText'),
+    headerThemeToggleBtn: document.getElementById('headerThemeToggleBtn'),
+    themeIconSun: document.getElementById('themeIconSun'),
+    themeIconMoon: document.getElementById('themeIconMoon'),
     webSerialWarning: document.getElementById('webSerialWarning'),
     staleDataWarning: document.getElementById('staleDataWarning'),
     staleTimeCount: document.getElementById('staleTimeCount'),
@@ -83,7 +426,8 @@
     motorPillDot: document.getElementById('motorPillDot'),
     motorStateText: document.getElementById('motorStateText'),
     motorDirectionText: document.getElementById('motorDirectionText'),
-    motorPwmText: document.getElementById('motorPwmText'),
+    motorRpmHeroVal: document.getElementById('motorRpmHeroVal'),
+    motorPulsesHeroVal: document.getElementById('motorPulsesHeroVal'),
     motorBuzzerState: document.getElementById('motorBuzzerState'),
     motorHealthSummary: document.getElementById('motorHealthSummary'),
 
@@ -128,9 +472,18 @@
     humidityBarFill: document.getElementById('humidityBarFill'),
     humidityCondText: document.getElementById('humidityCondText'),
 
+    // RPM & KY-024 Cards
+    rpmCard: document.getElementById('rpmCard'),
+    rpmVal: document.getElementById('rpmVal'),
+    rpmBadge: document.getElementById('rpmBadge'),
+    rpmBarFill: document.getElementById('rpmBarFill'),
+    irPulsesVal: document.getElementById('irPulsesVal'),
+
+    ky024Card: document.getElementById('ky024Card'),
     ky024Val: document.getElementById('ky024Val'),
     ky024Badge: document.getElementById('ky024Badge'),
     ky024BarFill: document.getElementById('ky024BarFill'),
+    ky024StateText: document.getElementById('ky024StateText'),
 
     // Alert Matrix Checks
     alertVibStatus: document.getElementById('alertVibStatus'),
@@ -183,7 +536,21 @@
     settingVibMax: document.getElementById('settingVibMax'),
     settingTempWarn: document.getElementById('settingTempWarn'),
     settingTempCrit: document.getElementById('settingTempCrit'),
-    settingStaleTimeout: document.getElementById('settingStaleTimeout')
+    settingStaleTimeout: document.getElementById('settingStaleTimeout'),
+
+    // Tabs & Firmware Viewer
+    tabBtnThresholds: document.getElementById('tabBtnThresholds'),
+    tabBtnFirmware: document.getElementById('tabBtnFirmware'),
+    tabBtnTheme: document.getElementById('tabBtnTheme'),
+    tabThresholds: document.getElementById('tabThresholds'),
+    tabFirmware: document.getElementById('tabFirmware'),
+    tabTheme: document.getElementById('tabTheme'),
+    copyFirmwareBtn: document.getElementById('copyFirmwareBtn'),
+    copyFirmwareLabel: document.getElementById('copyFirmwareLabel'),
+    downloadFirmwareBtn: document.getElementById('downloadFirmwareBtn'),
+    firmwareCodeText: document.getElementById('firmwareCodeText'),
+    themeOptDark: document.getElementById('themeOptDark'),
+    themeOptLight: document.getElementById('themeOptLight')
   };
 
   // ================= INITIALIZATION =================
@@ -192,9 +559,12 @@
     updateThresholdDisplays();
     checkWebSerialSupport();
     initCharts();
+    initTheme();
+    initModalTabs();
+    initFirmwareViewer();
     setupEventListeners();
     startStaleWatchdog();
-    appendTerminalLine('MOTRIVEXA IoT Core initialized. Ready to connect.', 'system');
+    appendTerminalLine('MOTRIVEXA IoT Core initialized. Ready to connect @ 115200 Baud.', 'system');
   }
 
   // ================= SETTINGS MANAGEMENT =================
@@ -258,6 +628,163 @@
 
   function closeSettingsModal() {
     dom.settingsModal.classList.add('hidden');
+  }
+
+  // ================= MODAL TABS =================
+  function initModalTabs() {
+    const tabs = [
+      { btn: dom.tabBtnThresholds, pane: dom.tabThresholds },
+      { btn: dom.tabBtnFirmware, pane: dom.tabFirmware },
+      { btn: dom.tabBtnTheme, pane: dom.tabTheme }
+    ];
+
+    tabs.forEach(({ btn, pane }) => {
+      if (!btn || !pane) return;
+      btn.addEventListener('click', () => {
+        tabs.forEach(t => {
+          if (t.btn) {
+            t.btn.classList.remove('active');
+            t.btn.setAttribute('aria-selected', 'false');
+          }
+          if (t.pane) t.pane.classList.add('hidden');
+        });
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        pane.classList.remove('hidden');
+      });
+    });
+  }
+
+  // ================= FIRMWARE CODE VIEWER & DOWNLOADER =================
+  function initFirmwareViewer() {
+    if (dom.firmwareCodeText) {
+      dom.firmwareCodeText.textContent = FIRMWARE_CODE;
+    }
+
+    if (dom.copyFirmwareBtn) {
+      dom.copyFirmwareBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(FIRMWARE_CODE);
+          showCopySuccess();
+        } catch (e) {
+          const ta = document.createElement('textarea');
+          ta.value = FIRMWARE_CODE;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          showCopySuccess();
+        }
+      });
+    }
+
+    if (dom.downloadFirmwareBtn) {
+      dom.downloadFirmwareBtn.addEventListener('click', () => {
+        const blob = new Blob([FIRMWARE_CODE], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'motrivexa_esp32.ino';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        appendTerminalLine('Downloaded motrivexa_esp32.ino firmware.', 'system');
+      });
+    }
+  }
+
+  function showCopySuccess() {
+    if (!dom.copyFirmwareLabel) return;
+    const orig = dom.copyFirmwareLabel.textContent;
+    dom.copyFirmwareLabel.textContent = '✓ Copied!';
+    if (dom.copyFirmwareBtn) dom.copyFirmwareBtn.classList.add('btn-success');
+    setTimeout(() => {
+      dom.copyFirmwareLabel.textContent = orig;
+      if (dom.copyFirmwareBtn) dom.copyFirmwareBtn.classList.remove('btn-success');
+    }, 2000);
+  }
+
+  // ================= THEME MANAGEMENT =================
+  function initTheme() {
+    try {
+      const storedTheme = localStorage.getItem('motrivexa_theme');
+      if (storedTheme === 'light' || storedTheme === 'dark') {
+        currentTheme = storedTheme;
+      }
+    } catch (e) {
+      currentTheme = 'dark';
+    }
+    applyTheme(currentTheme);
+
+    if (dom.headerThemeToggleBtn) {
+      dom.headerThemeToggleBtn.addEventListener('click', () => {
+        toggleTheme();
+      });
+    }
+
+    if (dom.themeOptDark) {
+      dom.themeOptDark.addEventListener('click', () => {
+        setTheme('dark');
+      });
+    }
+
+    if (dom.themeOptLight) {
+      dom.themeOptLight.addEventListener('click', () => {
+        setTheme('light');
+      });
+    }
+  }
+
+  function toggleTheme() {
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+  }
+
+  function setTheme(theme) {
+    currentTheme = theme;
+    try {
+      localStorage.setItem('motrivexa_theme', theme);
+    } catch (e) {}
+    applyTheme(theme);
+    appendTerminalLine(`Switched theme to: ${theme.toUpperCase()}`, 'system');
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+
+    if (dom.themeIconSun && dom.themeIconMoon) {
+      if (theme === 'light') {
+        dom.themeIconSun.classList.add('hidden');
+        dom.themeIconMoon.classList.remove('hidden');
+      } else {
+        dom.themeIconSun.classList.remove('hidden');
+        dom.themeIconMoon.classList.add('hidden');
+      }
+    }
+
+    if (dom.themeOptDark && dom.themeOptLight) {
+      dom.themeOptDark.classList.toggle('active', theme === 'dark');
+      dom.themeOptLight.classList.toggle('active', theme === 'light');
+    }
+
+    updateChartTheme(theme);
+  }
+
+  function updateChartTheme(theme) {
+    const textColor = theme === 'light' ? '#334155' : '#94a3b8';
+    const gridColor = theme === 'light' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.06)';
+
+    [electricalChart, powerChart, thermalChart, vibrationChart].forEach(chart => {
+      if (!chart) return;
+      if (chart.options && chart.options.scales) {
+        Object.values(chart.options.scales).forEach(scale => {
+          if (scale.ticks) scale.ticks.color = textColor;
+          if (scale.grid) scale.grid.color = gridColor;
+        });
+      }
+      chart.update('none');
+    });
   }
 
   // ================= WEB SERIAL API IMPLEMENTATION =================
@@ -340,37 +867,38 @@
     }
   }
 
-  function handleDeviceUnplugged(event) {
+  function handleDeviceUnplugged() {
     appendTerminalLine('HARDWARE EVENT: USB cable unplugged or device disconnected.', 'alert');
     disconnectDevice();
   }
 
   // ================= SERIAL STREAM READER =================
   async function readSerialStream() {
-    const textDecoder = new TextDecoderStream();
-    const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
-    reader = textDecoder.readable.getReader();
-
-    try {
-      while (keepReading) {
-        const { value, done } = await reader.read();
-        if (done) {
-          // Stream cancelled
-          break;
-        }
-        if (value) {
-          processIncomingChunk(value);
-        }
-      }
-    } catch (err) {
-      if (keepReading) {
-        console.error('Error reading serial stream:', err);
-        appendTerminalLine(`Stream read error: ${err.message}`, 'alert');
-      }
-    } finally {
+    while (port && port.readable && keepReading) {
       try {
-        reader.releaseLock();
-      } catch (e) {}
+        reader = port.readable.getReader();
+        const decoder = new TextDecoder();
+        while (keepReading) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            processIncomingChunk(chunk);
+          }
+        }
+      } catch (err) {
+        if (keepReading) {
+          console.error('Error reading serial stream:', err);
+          appendTerminalLine(`Stream read error: ${err.message}`, 'alert');
+        }
+      } finally {
+        if (reader) {
+          try {
+            reader.releaseLock();
+          } catch (e) {}
+          reader = null;
+        }
+      }
     }
   }
 
@@ -389,21 +917,168 @@
     }
   }
 
+  // ================= PARSING ESP32 SERIAL OUTPUT =================
+  function scheduleTelemetryCommit() {
+    if (telemetryCommitTimer) clearTimeout(telemetryCommitTimer);
+    telemetryCommitTimer = setTimeout(() => {
+      commitTelemetry();
+    }, 60);
+  }
+
+  function commitTelemetry() {
+    if (telemetryCommitTimer) {
+      clearTimeout(telemetryCommitTimer);
+      telemetryCommitTimer = null;
+    }
+
+    // Determine alert conditions
+    const isAlert = (
+      (currentTelemetry.vibrationScore > settings.vibMax) ||
+      (currentTelemetry.voltage < settings.voltMin || currentTelemetry.voltage > settings.voltMax) ||
+      (currentTelemetry.current_mA > settings.currMax) ||
+      (currentTelemetry.motorTemperature !== null && currentTelemetry.motorTemperature > settings.tempWarn)
+    );
+    currentTelemetry.buzzer = isAlert ? 'ALERT' : 'OFF';
+
+    onTelemetryReceived({ ...currentTelemetry }, JSON.stringify(currentTelemetry));
+  }
+
   function handleSerialLine(line) {
-    // 1. Check if line is valid JSON telemetry
+    if (!line) return;
+
+    // 1. JSON Telemetry Fallback (if firmware ever emits JSON)
     if (line.startsWith('{') && line.endsWith('}')) {
       try {
         const data = JSON.parse(line);
         if (data.type === 'telemetry' || data.voltage !== undefined || data.motor !== undefined) {
-          onTelemetryReceived(data, line);
+          if (data.voltage !== undefined) currentTelemetry.voltage = parseFloat(data.voltage) || 0;
+          if (data.current !== undefined) {
+            const c = parseFloat(data.current) || 0;
+            currentTelemetry.current = c > 10 ? c / 1000.0 : c;
+            currentTelemetry.current_mA = c > 10 ? c : c * 1000.0;
+          }
+          if (data.power !== undefined) {
+            const p = parseFloat(data.power) || 0;
+            currentTelemetry.power = p > 50 ? p / 1000.0 : p;
+            currentTelemetry.power_mW = p > 50 ? p : p * 1000.0;
+          }
+          if (data.motorTemperature !== undefined) currentTelemetry.motorTemperature = data.motorTemperature;
+          if (data.ambientTemperature !== undefined) currentTelemetry.ambientTemperature = data.ambientTemperature;
+          if (data.humidity !== undefined) currentTelemetry.humidity = data.humidity;
+          if (data.vibrationScore !== undefined) currentTelemetry.vibrationScore = parseInt(data.vibrationScore, 10) || 0;
+          if (data.ky024Raw !== undefined) currentTelemetry.ky024Raw = parseInt(data.ky024Raw, 10) || 0;
+          if (data.rpm !== undefined) currentTelemetry.rpm = parseInt(data.rpm, 10) || 0;
+          if (data.irPulses !== undefined) currentTelemetry.irPulses = parseInt(data.irPulses, 10) || 0;
+          if (data.motor !== undefined) {
+            currentTelemetry.motor = (data.motor.toUpperCase().includes('ON') || data.motor.toUpperCase().includes('FWD')) ? 'ON' : 'OFF';
+          }
+          commitTelemetry();
           return;
         }
-      } catch (e) {
-        // Malformed JSON chunk, ignore without crashing reader
+      } catch (e) {}
+    }
+
+    // 2. Direct Motor Status Commands
+    const upperLine = line.toUpperCase().trim();
+    if (upperLine === 'MOTOR ON') {
+      currentTelemetry.motor = 'ON';
+      commitTelemetry();
+      appendTerminalLine(line, 'cmd');
+      return;
+    }
+    if (upperLine === 'MOTOR OFF') {
+      currentTelemetry.motor = 'OFF';
+      currentTelemetry.rpm = 0;
+      currentTelemetry.vibrationScore = 0;
+      commitTelemetry();
+      appendTerminalLine(line, 'cmd');
+      return;
+    }
+
+    // 3. Human-Readable Key-Value Pairs from ESP32 Serial Output
+    if (line.includes(':')) {
+      const colonIdx = line.indexOf(':');
+      const key = line.slice(0, colonIdx).trim().toUpperCase();
+      const valStr = line.slice(colonIdx + 1).trim();
+      const valNum = parseFloat(valStr);
+
+      let matched = false;
+
+      if (key.includes('VOLTAGE')) {
+        if (!isNaN(valNum)) currentTelemetry.voltage = valNum;
+        matched = true;
+      }
+      else if (key.includes('CURRENT')) {
+        if (!isNaN(valNum)) {
+          // ESP32 outputs in Amperes (e.g. 0.123 A)
+          currentTelemetry.current = valNum;
+          currentTelemetry.current_mA = valNum * 1000.0;
+        }
+        matched = true;
+      }
+      else if (key.includes('POWER')) {
+        if (!isNaN(valNum)) {
+          // ESP32 outputs in Watts (e.g. 1.48 W)
+          currentTelemetry.power = valNum;
+          currentTelemetry.power_mW = valNum * 1000.0;
+        }
+        matched = true;
+      }
+      else if (key.includes('MOTOR TEMPERATURE')) {
+        if (!isNaN(valNum)) {
+          currentTelemetry.motorTemperature = (valNum > -50 && valNum < 150) ? valNum : null;
+        }
+        matched = true;
+      }
+      else if (key.includes('AMBIENT TEMPERATURE')) {
+        if (!isNaN(valNum)) {
+          currentTelemetry.ambientTemperature = (valNum > -40 && valNum < 85) ? valNum : null;
+        }
+        matched = true;
+      }
+      else if (key.includes('HUMIDITY')) {
+        if (!isNaN(valNum)) {
+          currentTelemetry.humidity = (valNum >= 0 && valNum <= 100) ? valNum : null;
+        }
+        matched = true;
+      }
+      else if (key.includes('IR PULSES')) {
+        const p = parseInt(valStr, 10);
+        if (!isNaN(p)) currentTelemetry.irPulses = p;
+        matched = true;
+      }
+      else if (key === 'RPM' || key.endsWith('RPM')) {
+        const r = parseInt(valStr, 10);
+        if (!isNaN(r)) currentTelemetry.rpm = r;
+        matched = true;
+      }
+      else if (key.includes('KY024')) {
+        const k = parseInt(valStr, 10);
+        if (!isNaN(k)) currentTelemetry.ky024Raw = k;
+        matched = true;
+      }
+      else if (key.includes('VIBRATION SCORE')) {
+        const v = parseInt(valStr, 10);
+        if (!isNaN(v)) currentTelemetry.vibrationScore = v;
+        matched = true;
+      }
+      else if (key.includes('MOTOR STATUS')) {
+        currentTelemetry.motor = valStr.toUpperCase().includes('ON') ? 'ON' : 'OFF';
+        matched = true;
+        // Last line of the ESP32 block: commit immediately!
+        commitTelemetry();
+        appendTerminalLine(line, 'telemetry');
+        return;
+      }
+
+      if (matched) {
+        scheduleTelemetryCommit();
+        appendTerminalLine(line, 'telemetry');
+        return;
       }
     }
 
-    // 2. Otherwise line is a human-readable log or debug message from firmware
+    // 4. Header, Boot messages, or general log lines
     classifyAndLogSerialLine(line);
   }
 
@@ -411,29 +1086,44 @@
     let lineClass = 'system';
     if (line.includes('ALERT') || line.includes('CRITICAL')) {
       lineClass = 'alert';
-    } else if (line.includes('WARNING') || line.includes('warn')) {
+    } else if (line.includes('WARNING') || line.includes('warn') || line.includes('NOT FOUND')) {
       lineClass = 'warn';
-    } else if (line.includes('Command:') || line.includes('Motor')) {
+    } else if (line.includes('MOTOR') || line.includes('Command')) {
       lineClass = 'cmd';
     }
     appendTerminalLine(line, lineClass);
   }
 
   // ================= DIRECT MOTOR COMMAND TRANSMITTER =================
-  async function sendMotorCommand(cmdChar) {
+  async function sendMotorCommand(cmd) {
     if (!port || !port.writable) {
-      alert('Cannot send command: ESP32 is not connected.');
+      alert('Cannot send command: ESP32 is not connected via USB.');
       return;
     }
 
     try {
+      let wireCmd = cmd.trim().toUpperCase();
+      if (wireCmd === 'F') wireCmd = 'ON';
+      if (wireCmd === 'R') wireCmd = 'STATUS';
+      if (wireCmd === 'S') wireCmd = 'OFF';
+
       const encoder = new TextEncoder();
       const writer = port.writable.getWriter();
-      await writer.write(encoder.encode(cmdChar + '\n'));
+      await writer.write(encoder.encode(wireCmd + '\n'));
       writer.releaseLock();
 
-      const cmdMap = { 'F': 'FORWARD', 'R': 'REVERSE', 'S': 'STOP' };
-      appendTerminalLine(`Sent Motor Command: '${cmdChar}' (${cmdMap[cmdChar] || 'Command'})`, 'cmd');
+      appendTerminalLine(`Sent Motor Command: '${wireCmd}'`, 'cmd');
+
+      // Optimistic UI state update for immediate user feedback
+      if (wireCmd === 'ON') {
+        currentTelemetry.motor = 'ON';
+        commitTelemetry();
+      } else if (wireCmd === 'OFF') {
+        currentTelemetry.motor = 'OFF';
+        currentTelemetry.rpm = 0;
+        currentTelemetry.vibrationScore = 0;
+        commitTelemetry();
+      }
     } catch (err) {
       console.error('Error writing motor command:', err);
       appendTerminalLine(`Command send error: ${err.message}`, 'alert');
@@ -441,16 +1131,13 @@
   }
 
   // ================= TELEMETRY PROCESSING =================
-  function onTelemetryReceived(data, rawJsonLine) {
+  function onTelemetryReceived(data) {
     lastTelemetryTimestamp = Date.now();
     dom.staleDataWarning.classList.add('hidden');
 
     const timestamp = new Date();
     const timeFormatted = timestamp.toLocaleTimeString();
     dom.lastUpdateText.textContent = timeFormatted;
-
-    // Log to terminal (truncated if long)
-    appendTerminalLine(rawJsonLine, 'json');
 
     // 1. Update Motor Hero Section
     updateMotorHero(data);
@@ -472,33 +1159,24 @@
 
   // ================= UI UPDATE: MOTOR HERO =================
   function updateMotorHero(data) {
-    const motorState = (data.motor || 'STOP').toUpperCase();
+    const isMotorOn = (data.motor || 'OFF').toUpperCase() === 'ON';
     const buzzerState = (data.buzzer || 'OFF').toUpperCase();
 
-    dom.motorStateText.textContent = motorState;
-    dom.motorBuzzerState.textContent = buzzerState;
+    dom.motorStateText.textContent = isMotorOn ? 'MOTOR ON' : 'MOTOR OFF';
+    dom.motorDirectionOverlay.textContent = isMotorOn ? 'RUNNING' : 'STOPPED';
+    dom.motorDirectionText.textContent = isMotorOn ? 'ACTIVE (RUNNING)' : 'STOPPED (IDLE)';
 
     // Reset rotor animation classes
     dom.rotorBladesGroup.classList.remove('rotor-spinning-forward', 'rotor-spinning-reverse');
     dom.motorStatusPill.classList.remove('running-fwd', 'running-rev', 'alert-fault');
 
-    if (motorState === 'FORWARD') {
+    if (isMotorOn) {
       dom.rotorBladesGroup.classList.add('rotor-spinning-forward');
-      dom.motorDirectionOverlay.textContent = 'FORWARD';
-      dom.motorDirectionText.textContent = 'FORWARD (CLOCKWISE)';
       dom.motorStatusPill.classList.add('running-fwd');
-    } else if (motorState === 'REVERSE') {
-      dom.rotorBladesGroup.classList.add('rotor-spinning-reverse');
-      dom.motorDirectionOverlay.textContent = 'REVERSE';
-      dom.motorDirectionText.textContent = 'REVERSE (COUNTER-CLOCKWISE)';
-      dom.motorStatusPill.classList.add('running-rev');
-    } else {
-      dom.motorDirectionOverlay.textContent = 'STOPPED';
-      dom.motorDirectionText.textContent = 'STOPPED (IDLE)';
     }
 
     // Hardware buzzer alert highlight
-    if (buzzerState === 'ALERT' || data.alertActive) {
+    if (buzzerState === 'ALERT') {
       dom.motorStatusPill.classList.add('alert-fault');
       dom.motorHealthSummary.textContent = 'ALERT TRIGGERED';
       dom.motorHealthSummary.className = 'submetric-val critical';
@@ -513,11 +1191,10 @@
     // 1. Bus Voltage (INA219)
     const voltage = typeof data.voltage === 'number' ? data.voltage : 0.0;
     dom.voltageVal.textContent = voltage.toFixed(2);
-    if (data.shuntVoltage !== undefined && data.shuntVoltage !== null) {
-      dom.shuntVoltageVal.textContent = `${parseFloat(data.shuntVoltage).toFixed(2)} mV`;
+    if (dom.shuntVoltageVal) {
+      dom.shuntVoltageVal.textContent = `${(data.current * 0.1).toFixed(2)} mV`;
     }
 
-    // Voltage Badge & Bar
     const vPct = Math.min(Math.max((voltage / 16.0) * 100, 0), 100);
     dom.voltageBarFill.style.width = `${vPct}%`;
 
@@ -530,35 +1207,34 @@
     }
 
     // 2. Load Current (INA219)
-    const current = typeof data.current === 'number' ? data.current : 0.0;
-    dom.currentVal.textContent = current.toFixed(1);
-    const amperes = (current / 1000.0).toFixed(3);
-    dom.currentAmpVal.textContent = `${amperes} A`;
+    const currentA = typeof data.current === 'number' ? data.current : 0.0;
+    const currentMA = typeof data.current_mA === 'number' ? data.current_mA : currentA * 1000.0;
+    dom.currentVal.textContent = currentMA.toFixed(1);
+    dom.currentAmpVal.textContent = `${currentA.toFixed(3)} A`;
 
-    const cPct = Math.min(Math.max((current / 1000.0) * 100, 0), 100);
+    const cPct = Math.min(Math.max((currentMA / 1000.0) * 100, 0), 100);
     dom.currentBarFill.style.width = `${cPct}%`;
 
-    if (current > settings.currMax) {
+    if (currentMA > settings.currMax) {
       setCardBadge(dom.currentBadge, 'OVERCURRENT', 'critical');
     } else {
       setCardBadge(dom.currentBadge, 'NORMAL', 'normal');
     }
 
     // 3. Power Consumption (INA219)
-    const power = typeof data.power === 'number' ? data.power : 0.0;
-    dom.powerVal.textContent = power.toFixed(1);
-    const watts = (power / 1000.0).toFixed(3);
-    dom.powerWattVal.textContent = `${watts} W`;
+    const powerW = typeof data.power === 'number' ? data.power : 0.0;
+    const powerMW = typeof data.power_mW === 'number' ? data.power_mW : powerW * 1000.0;
+    dom.powerVal.textContent = powerMW.toFixed(1);
+    dom.powerWattVal.textContent = `${powerW.toFixed(2)} W`;
 
-    const pPct = Math.min(Math.max((power / 12000.0) * 100, 0), 100);
+    const pPct = Math.min(Math.max((powerMW / 12000.0) * 100, 0), 100);
     dom.powerBarFill.style.width = `${pPct}%`;
     setCardBadge(dom.powerBadge, 'NORMAL', 'normal');
 
-    // 4. Vibration Health (MPU6050)
+    // 4. Vibration Score
     const vibScore = typeof data.vibrationScore === 'number' ? data.vibrationScore : 0;
-    const vibRms = typeof data.vibrationRMS === 'number' ? data.vibrationRMS : 0.0;
     dom.vibrationScoreVal.textContent = vibScore;
-    dom.vibrationRmsVal.textContent = `${vibRms.toFixed(4)} g`;
+    dom.vibrationRmsVal.textContent = `${vibScore} mg`;
 
     const vibPct = Math.min(Math.max((vibScore / 250.0) * 100, 0), 100);
     dom.vibrationBarFill.style.width = `${vibPct}%`;
@@ -575,7 +1251,7 @@
     if (data.motorTemperature !== null && data.motorTemperature !== undefined && !isNaN(data.motorTemperature)) {
       motorTempVal = parseFloat(data.motorTemperature);
       motorTempValid = true;
-      dom.motorTempVal.textContent = motorTempVal.toFixed(1);
+      dom.motorTempVal.textContent = motorTempVal.toFixed(2);
       dom.motorTempVal.classList.remove('unavailable-text');
 
       const tPct = Math.min(Math.max((motorTempVal / 100.0) * 100, 0), 100);
@@ -649,11 +1325,40 @@
       setCardBadge(dom.humidityBadge, 'UNAVAILABLE', 'unavailable');
     }
 
-    // 8. KY-024 Magnetic Sensor AO (GPIO 34)
+    // 8. Rotational Speed (RPM from IR Sensor)
+    const rpmVal = typeof data.rpm === 'number' ? Math.round(data.rpm) : 0;
+    const irPulses = typeof data.irPulses === 'number' ? data.irPulses : 0;
+    if (dom.rpmVal) dom.rpmVal.textContent = rpmVal;
+    if (dom.motorRpmHeroVal) dom.motorRpmHeroVal.textContent = `${rpmVal} RPM`;
+    if (dom.irPulsesVal) dom.irPulsesVal.textContent = irPulses;
+    if (dom.motorPulsesHeroVal) dom.motorPulsesHeroVal.textContent = `${irPulses} Pulses`;
+
+    if (dom.rpmBarFill) {
+      const rPct = Math.min(Math.max((rpmVal / 5000.0) * 100, 0), 100);
+      dom.rpmBarFill.style.width = `${rPct}%`;
+    }
+    if (dom.rpmBadge) {
+      if (rpmVal > 0) {
+        setCardBadge(dom.rpmBadge, 'ROTATING', 'normal');
+      } else {
+        setCardBadge(dom.rpmBadge, 'STOPPED', 'offline');
+      }
+    }
+
+    // 9. KY-024 Magnetic Sensor AO (GPIO 34)
     const ky024Raw = typeof data.ky024Raw === 'number' ? data.ky024Raw : 0;
-    dom.ky024Val.textContent = ky024Raw;
-    const magPct = Math.min(Math.max((ky024Raw / 4095.0) * 100, 0), 100);
-    dom.ky024BarFill.style.width = `${magPct}%`;
+    if (dom.ky024Val) dom.ky024Val.textContent = ky024Raw;
+    if (dom.ky024BarFill) {
+      const magPct = Math.min(Math.max((ky024Raw / 4095.0) * 100, 0), 100);
+      dom.ky024BarFill.style.width = `${magPct}%`;
+    }
+    if (dom.ky024Badge) {
+      const isKyActive = data.motor === 'ON' || ky024Raw > 0;
+      setCardBadge(dom.ky024Badge, isKyActive ? 'ACTIVE' : 'IDLE', isKyActive ? 'normal' : 'offline');
+    }
+    if (dom.ky024StateText) {
+      dom.ky024StateText.textContent = ky024Raw > 2500 ? 'High Magnetic Flux' : ky024Raw > 200 ? 'Active Flux Detected' : 'Nominal Flux';
+    }
   }
 
   function setCardBadge(element, text, level) {
@@ -669,7 +1374,7 @@
     // 1. Vibration
     const vibScore = data.vibrationScore || 0;
     if (vibScore > settings.vibMax) {
-      setAlertCheck(dom.alertCheckVib, dom.alertVibStatus, dom.alertVibDesc, 'CRITICAL', `Calculated vibration score (${vibScore}) exceeded configured threshold (${settings.vibMax}).`, 'critical');
+      setAlertCheck(dom.alertCheckVib, dom.alertVibStatus, dom.alertVibDesc, 'CRITICAL', `Vibration score (${vibScore}) exceeded safety threshold (${settings.vibMax}).`, 'critical');
       hasCriticalAlarm = true;
     } else {
       setAlertCheck(dom.alertCheckVib, dom.alertVibStatus, dom.alertVibDesc, 'NORMAL', `Vibration score within acceptable operational tolerances (≤ ${settings.vibMax}).`, 'normal');
@@ -687,9 +1392,9 @@
     }
 
     // 3. Current
-    const current = typeof data.current === 'number' ? data.current : 0.0;
-    if (current > settings.currMax) {
-      setAlertCheck(dom.alertCheckCurr, dom.alertCurrStatus, dom.alertCurrDesc, 'OVERCURRENT', `Load current (${current.toFixed(1)} mA) exceeded safety limit (${settings.currMax.toFixed(1)} mA).`, 'critical');
+    const currentMA = typeof data.current_mA === 'number' ? data.current_mA : (data.current || 0) * 1000.0;
+    if (currentMA > settings.currMax) {
+      setAlertCheck(dom.alertCheckCurr, dom.alertCurrStatus, dom.alertCurrDesc, 'OVERCURRENT', `Load current (${currentMA.toFixed(1)} mA) exceeded safety limit (${settings.currMax.toFixed(1)} mA).`, 'critical');
       hasCriticalAlarm = true;
     } else {
       setAlertCheck(dom.alertCheckCurr, dom.alertCurrStatus, dom.alertCurrDesc, 'NORMAL', `Load current below continuous limit (≤ ${settings.currMax.toFixed(1)} mA).`, 'normal');
@@ -731,7 +1436,7 @@
   // ================= WEB AUDIO SYNTHESIZER FOR ALARM =================
   function triggerAudioAlarmBeep() {
     const now = Date.now();
-    if (now - lastBeepTime < 1500) return; // Beep max once every 1.5s
+    if (now - lastBeepTime < 1500) return;
     lastBeepTime = now;
 
     try {
@@ -746,7 +1451,7 @@
       const gain = audioContext.createGain();
 
       osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(880, audioContext.currentTime); // A5 note
+      osc.frequency.setValueAtTime(880, audioContext.currentTime);
       osc.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.25);
 
       gain.gain.setValueAtTime(0.2, audioContext.currentTime);
@@ -764,9 +1469,8 @@
 
   // ================= REAL-TIME CHART.JS SETUP =================
   function initCharts() {
-    // Dark theme global defaults for Chart.js
-    Chart.defaults.color = '#94a3b8';
-    Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.06)';
+    Chart.defaults.color = currentTheme === 'light' ? '#334155' : '#94a3b8';
+    Chart.defaults.borderColor = currentTheme === 'light' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.06)';
     Chart.defaults.font.family = "'JetBrains Mono', 'Inter', monospace";
     Chart.defaults.font.size = 11;
 
@@ -834,7 +1538,7 @@
         labels: [],
         datasets: [
           {
-            label: 'Power (mW)',
+            label: 'Power (W)',
             data: [],
             borderColor: '#8b5cf6',
             backgroundColor: 'rgba(139, 92, 246, 0.15)',
@@ -853,9 +1557,9 @@
         scales: {
           x: { grid: { display: false } },
           y: {
-            title: { display: true, text: 'mW' },
+            title: { display: true, text: 'Watts (W)' },
             min: 0,
-            suggestedMax: 8000
+            suggestedMax: 10
           }
         }
       }
@@ -912,7 +1616,7 @@
         labels: [],
         datasets: [
           {
-            label: 'Vibration Score',
+            label: 'Vibration Score (mg)',
             data: [],
             borderColor: '#3b82f6',
             backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -943,9 +1647,9 @@
           yVib: {
             type: 'linear',
             position: 'left',
-            title: { display: true, text: 'Vib Score', color: '#3b82f6' },
+            title: { display: true, text: 'Vib Score (mg)', color: '#3b82f6' },
             min: 0,
-            suggestedMax: 200
+            suggestedMax: 150
           },
           yHum: {
             type: 'linear',
@@ -961,19 +1665,19 @@
   }
 
   function updateCharts(data, timeLabel) {
-    // Hide empty state placeholders on first data point
-    dom.electricalChartEmpty.style.display = 'none';
-    dom.powerChartEmpty.style.display = 'none';
-    dom.thermalChartEmpty.style.display = 'none';
-    dom.vibrationChartEmpty.style.display = 'none';
+    if (dom.electricalChartEmpty) dom.electricalChartEmpty.style.display = 'none';
+    if (dom.powerChartEmpty) dom.powerChartEmpty.style.display = 'none';
+    if (dom.thermalChartEmpty) dom.thermalChartEmpty.style.display = 'none';
+    if (dom.vibrationChartEmpty) dom.vibrationChartEmpty.style.display = 'none';
 
     // 1. Electrical
+    const currentMA = typeof data.current_mA === 'number' ? data.current_mA : (data.current || 0) * 1000.0;
     appendChartPoint(electricalChart, timeLabel, [
       typeof data.voltage === 'number' ? data.voltage : null,
-      typeof data.current === 'number' ? data.current : null
+      currentMA
     ]);
 
-    // 2. Power
+    // 2. Power in Watts
     appendChartPoint(powerChart, timeLabel, [
       typeof data.power === 'number' ? data.power : null
     ]);
@@ -1008,7 +1712,7 @@
       }
     });
 
-    chart.update('none'); // non-animated high-performance refresh
+    chart.update('none');
   }
 
   function toggleChartsPause() {
@@ -1019,14 +1723,18 @@
 
   // ================= TELEMETRY TABLE & CSV EXPORT =================
   function recordTelemetryHistory(data, timeFormatted) {
-    // Store record in memory array
+    const currentA = typeof data.current === 'number' ? data.current : 0.0;
+    const currentMA = typeof data.current_mA === 'number' ? data.current_mA : currentA * 1000.0;
+    const powerW = typeof data.power === 'number' ? data.power : 0.0;
+
     const record = {
       index: telemetryHistory.length + 1,
       time: timeFormatted,
-      motor: data.motor || 'STOP',
+      motor: data.motor || 'OFF',
+      rpm: typeof data.rpm === 'number' ? Math.round(data.rpm) : 0,
       voltage: typeof data.voltage === 'number' ? data.voltage.toFixed(2) : '--',
-      current: typeof data.current === 'number' ? data.current.toFixed(1) : '--',
-      power: typeof data.power === 'number' ? data.power.toFixed(1) : '--',
+      current: currentMA.toFixed(1),
+      power: powerW.toFixed(2),
       motorTemp: data.motorTemperature !== null && !isNaN(data.motorTemperature) ? parseFloat(data.motorTemperature).toFixed(1) : 'null',
       ambTemp: data.ambientTemperature !== null && !isNaN(data.ambientTemperature) ? parseFloat(data.ambientTemperature).toFixed(1) : 'null',
       humidity: data.humidity !== null && !isNaN(data.humidity) ? parseFloat(data.humidity).toFixed(1) : 'null',
@@ -1035,25 +1743,24 @@
       buzzer: data.buzzer || 'OFF'
     };
 
-    telemetryHistory.unshift(record); // Prepend for latest first
+    telemetryHistory.unshift(record);
     if (telemetryHistory.length > MAX_HISTORY_ROWS) {
       telemetryHistory.pop();
     }
 
     dom.telemetryCountBadge.textContent = `${telemetryHistory.length} Records`;
 
-    // Remove empty placeholder row if present
     if (dom.tableEmptyRow) {
       dom.tableEmptyRow.remove();
       dom.tableEmptyRow = null;
     }
 
-    // Insert new row at top
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${record.index}</td>
       <td>${record.time}</td>
-      <td><span class="status-badge ${record.motor === 'FORWARD' ? 'connected' : record.motor === 'REVERSE' ? 'connecting' : ''}">${record.motor}</span></td>
+      <td><span class="status-badge ${record.motor === 'ON' ? 'connected' : ''}">${record.motor}</span></td>
+      <td><strong>${record.rpm}</strong></td>
       <td>${record.voltage}</td>
       <td>${record.current}</td>
       <td>${record.power}</td>
@@ -1067,7 +1774,6 @@
 
     dom.telemetryTableBody.prepend(row);
 
-    // Keep DOM rows bounded to MAX_HISTORY_ROWS
     while (dom.telemetryTableBody.children.length > MAX_HISTORY_ROWS) {
       dom.telemetryTableBody.removeChild(dom.telemetryTableBody.lastChild);
     }
@@ -1077,7 +1783,7 @@
     telemetryHistory = [];
     dom.telemetryTableBody.innerHTML = `
       <tr class="empty-row" id="tableEmptyRow">
-        <td colspan="12">Session data cleared. Waiting for new telemetry records...</td>
+        <td colspan="13">Session data cleared. Waiting for new telemetry records...</td>
       </tr>
     `;
     dom.tableEmptyRow = document.getElementById('tableEmptyRow');
@@ -1092,14 +1798,13 @@
     }
 
     const headers = [
-      'RecordIndex', 'Timestamp', 'MotorState', 'Voltage_V', 'Current_mA',
-      'Power_mW', 'MotorTemp_C', 'AmbientTemp_C', 'Humidity_pct',
-      'VibrationScore', 'KY024_ADC', 'BuzzerState'
+      'RecordIndex', 'Timestamp', 'MotorState', 'RPM', 'Voltage_V', 'Current_mA',
+      'Power_W', 'MotorTemp_C', 'AmbientTemp_C', 'Humidity_pct',
+      'VibrationScore_mg', 'KY024_ADC', 'BuzzerState'
     ];
 
     let csvContent = headers.join(',') + '\r\n';
 
-    // Export in chronological order (reverse of table view)
     const chronological = [...telemetryHistory].reverse();
 
     chronological.forEach(r => {
@@ -1107,6 +1812,7 @@
         r.index,
         `"${r.time}"`,
         `"${r.motor}"`,
+        r.rpm,
         r.voltage,
         r.current,
         r.power,
@@ -1152,7 +1858,7 @@
       dom.cmdRevBtn.disabled = false;
       dom.cmdStopBtn.disabled = false;
 
-      dom.connInstructionText.textContent = 'ESP32 connected via USB. Live telemetry streaming continuously.';
+      dom.connInstructionText.textContent = 'ESP32 connected via USB. Live sensor telemetry streaming continuously.';
     } else if (state === 'connecting') {
       dom.headerStatusDot.className = 'status-dot connecting';
       dom.headerStatusText.textContent = 'Connecting...';
@@ -1161,7 +1867,6 @@
       dom.streamPipelineText.textContent = 'Opening COM Port...';
       dom.connectBtn.disabled = true;
     } else {
-      // Disconnected
       dom.headerStatusDot.className = 'status-dot disconnected';
       dom.headerStatusText.textContent = 'Disconnected';
       dom.connStatusBadge.textContent = 'DISCONNECTED';
@@ -1217,7 +1922,6 @@
 
     dom.terminalOutput.appendChild(line);
 
-    // Limit terminal buffer to 100 lines
     while (dom.terminalOutput.children.length > 100) {
       dom.terminalOutput.removeChild(dom.terminalOutput.firstChild);
     }
@@ -1246,9 +1950,9 @@
     dom.disconnectBtn.addEventListener('click', disconnectDevice);
 
     // Motor Command Buttons
-    dom.cmdFwdBtn.addEventListener('click', () => sendMotorCommand('F'));
-    dom.cmdRevBtn.addEventListener('click', () => sendMotorCommand('R'));
-    dom.cmdStopBtn.addEventListener('click', () => sendMotorCommand('S'));
+    dom.cmdFwdBtn.addEventListener('click', () => sendMotorCommand('ON'));
+    dom.cmdStopBtn.addEventListener('click', () => sendMotorCommand('OFF'));
+    dom.cmdRevBtn.addEventListener('click', () => sendMotorCommand('STATUS'));
 
     // Terminal Controls
     dom.toggleTerminalBtn.addEventListener('click', toggleTerminalDrawer);
@@ -1273,7 +1977,7 @@
       settings = { ...DEFAULT_SETTINGS };
       populateSettingsForm();
       updateThresholdDisplays();
-      appendTerminalLine('Reset settings to firmware default thresholds.', 'system');
+      appendTerminalLine('Reset settings to default thresholds.', 'system');
     });
 
     // Close modal on backdrop click

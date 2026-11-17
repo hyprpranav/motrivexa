@@ -60,7 +60,23 @@
           <span class="status-dot disconnected" id="headerStatusDot"></span>
           <span class="status-text" id="headerStatusText">Disconnected</span>
         </div>
-        <button type="button" class="icon-btn" id="openSettingsBtn" title="System Thresholds & Settings" aria-label="Open Settings">
+        <button type="button" class="icon-btn" id="headerThemeToggleBtn" title="Toggle Theme (Dark / Light)" aria-label="Toggle Theme">
+          <svg id="themeIconSun" class="theme-icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg id="themeIconMoon" class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+        <button type="button" class="icon-btn" id="openSettingsBtn" title="System Settings, Firmware Code & Theme" aria-label="Open Settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -145,30 +161,31 @@
             Connect your ESP32 through USB to begin live motor monitoring. Select the ESP32 COM / Serial port in the browser prompt.
           </p>
 
-          <!-- Motor Hardware Control Bar (Sends 'F', 'R', 'S' through serial) -->
+          <!-- Motor Hardware Control Bar (Sends 'ON', 'OFF', 'STATUS' through serial) -->
           <div class="hardware-control-bar">
             <span class="control-bar-label">Direct ESP32 Motor Commands:</span>
             <div class="control-btns-wrap">
-              <button type="button" class="btn btn-cmd btn-cmd-fwd" id="cmdFwdBtn" disabled title="Send 'F' (Forward) to ESP32">
+              <button type="button" class="btn btn-cmd btn-cmd-fwd" id="cmdFwdBtn" disabled title="Send 'ON' to ESP32">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="5 4 15 12 5 20 5 4" />
                   <line x1="19" y1="5" x2="19" y2="19" />
                 </svg>
-                <span>Forward (F)</span>
+                <span>Start Motor (ON)</span>
               </button>
-              <button type="button" class="btn btn-cmd btn-cmd-rev" id="cmdRevBtn" disabled title="Send 'R' (Reverse) to ESP32">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="19 20 9 12 19 4 19 20" />
-                  <line x1="5" y1="19" x2="5" y2="5" />
-                </svg>
-                <span>Reverse (R)</span>
-              </button>
-              <button type="button" class="btn btn-cmd btn-cmd-stop" id="cmdStopBtn" disabled title="Send 'S' (Emergency Stop) to ESP32">
+              <button type="button" class="btn btn-cmd btn-cmd-stop" id="cmdStopBtn" disabled title="Send 'OFF' to ESP32">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10" />
                   <rect x="9" y="9" width="6" height="6" />
                 </svg>
-                <span>Stop Motor (S)</span>
+                <span>Stop Motor (OFF)</span>
+              </button>
+              <button type="button" class="btn btn-cmd btn-cmd-rev" id="cmdRevBtn" disabled title="Send 'STATUS' to ESP32">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+                <span>Check Status</span>
               </button>
             </div>
           </div>
@@ -265,17 +282,22 @@
             <div class="submetric-card">
               <span class="submetric-label">OPERATING MODE</span>
               <span class="submetric-val" id="motorDirectionText">STOPPED (IDLE)</span>
-              <span class="submetric-hint">Direction Controlled via L298N</span>
+              <span class="submetric-hint">L298N Motor Driver Control</span>
             </div>
             <div class="submetric-card">
-              <span class="submetric-label">PWM DRIVE LEVEL</span>
-              <span class="submetric-val mono" id="motorPwmText">200 / 255 (78%)</span>
-              <span class="submetric-hint">ENA Pin 25 Duty Cycle</span>
+              <span class="submetric-label">MEASURED SPEED (RPM)</span>
+              <span class="submetric-val mono highlight" id="motorRpmHeroVal">0 RPM</span>
+              <span class="submetric-hint">Optical IR Sensor (GPIO 32)</span>
+            </div>
+            <div class="submetric-card">
+              <span class="submetric-label">IR PULSE COUNT</span>
+              <span class="submetric-val mono" id="motorPulsesHeroVal">0 Pulses</span>
+              <span class="submetric-hint">Per Measurement Window</span>
             </div>
             <div class="submetric-card">
               <span class="submetric-label">FAILSAFE BUZZER</span>
               <span class="submetric-val" id="motorBuzzerState">OFF</span>
-              <span class="submetric-hint">GPIO 33 Active Protection</span>
+              <span class="submetric-hint">Protection Failsafe Logic</span>
             </div>
             <div class="submetric-card">
               <span class="submetric-label">OVERALL HEALTH STATUS</span>
@@ -412,7 +434,7 @@
           </div>
         </article>
 
-        <!-- 4. Vibration Monitoring Card (MPU6050) -->
+        <!-- 4. Vibration Monitoring Card -->
         <article class="sensor-card" id="vibrationCard">
           <div class="sensor-card-header">
             <div class="sensor-title-group">
@@ -422,8 +444,8 @@
                 </svg>
               </div>
               <div>
-                <h4>Vibration Health</h4>
-                <span class="sensor-tag">MPU6050 3-Axis Accel</span>
+                <h4>Vibration Score</h4>
+                <span class="sensor-tag">Firmware Reported Metric</span>
               </div>
             </div>
             <span class="state-badge normal" id="vibrationBadge">NORMAL</span>
@@ -431,14 +453,14 @@
 
           <div class="sensor-value-box">
             <span class="primary-val mono" id="vibrationScoreVal">--</span>
-            <span class="unit">Score</span>
+            <span class="unit">mg</span>
           </div>
 
           <div class="card-bar-wrapper">
             <div class="bar-labels">
-              <span>0</span>
-              <span>Alert Threshold: <span id="vibThreshold">124</span></span>
-              <span>250</span>
+              <span>0 mg</span>
+              <span>Threshold: <span id="vibThreshold">124</span></span>
+              <span>250 mg</span>
             </div>
             <div class="metric-progress-bar">
               <div class="bar-fill vibration-fill" id="vibrationBarFill" style="width: 0%;"></div>
@@ -446,11 +468,11 @@
           </div>
 
           <div class="sensor-footer-meta">
-            <span class="meta-key">Vibration RMS:</span>
-            <span class="meta-val mono" id="vibrationRmsVal">-.---- g</span>
+            <span class="meta-key">Reported Intensity:</span>
+            <span class="meta-val mono" id="vibrationRmsVal">-- mg</span>
           </div>
           <p class="sensor-disclaimer">
-            *Prototype metric derived from 3-axis magnitude variance. Requires baseline calibration for ISO 10816 standards.
+            *Note: This vibration score is streamed from the ESP32 firmware (simulated metric; not calibrated to ISO 10816 standards).
           </p>
         </article>
       </div>
@@ -590,10 +612,50 @@
         </article>
       </div>
 
-      <!-- KY-024 Hall Effect Sensor Secondary Row -->
-      <div class="sensor-cards-grid single-wide">
-        <!-- 8. KY-024 Magnetic Sensor -->
-        <article class="sensor-card horizontal" id="ky024Card">
+      <!-- Speed (RPM) & Magnetic Sensing Row -->
+      <div class="sensor-cards-grid double">
+        <!-- 8. Rotational Speed (RPM) Card -->
+        <article class="sensor-card" id="rpmCard">
+          <div class="sensor-card-header">
+            <div class="sensor-title-group">
+              <div class="sensor-icon-box rpm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <div>
+                <h4>Motor Speed — RPM</h4>
+                <span class="sensor-tag">Optical IR Sensor (GPIO 32)</span>
+              </div>
+            </div>
+            <span class="state-badge normal" id="rpmBadge">STOPPED</span>
+          </div>
+
+          <div class="sensor-value-box">
+            <span class="primary-val mono" id="rpmVal">0</span>
+            <span class="unit">RPM</span>
+          </div>
+
+          <div class="card-bar-wrapper">
+            <div class="bar-labels">
+              <span>0 RPM</span>
+              <span>Speed Range</span>
+              <span>5000 RPM</span>
+            </div>
+            <div class="metric-progress-bar">
+              <div class="bar-fill rpm-fill" id="rpmBarFill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensor-footer-meta">
+            <span class="meta-key">IR Pulses / Window:</span>
+            <span class="meta-val mono highlight" id="irPulsesVal">0</span>
+          </div>
+        </article>
+
+        <!-- 9. KY-024 Magnetic Sensor -->
+        <article class="sensor-card" id="ky024Card">
           <div class="sensor-card-header">
             <div class="sensor-title-group">
               <div class="sensor-icon-box magnetic">
@@ -605,34 +667,31 @@
               </div>
               <div>
                 <h4>KY-024 Magnetic Sensor</h4>
-                <span class="sensor-tag">Analog Hall Effect Sensor (GPIO 34 ADC1)</span>
+                <span class="sensor-tag">Analog Hall Sensor (GPIO 34 ADC1)</span>
               </div>
             </div>
-            <span class="state-badge normal" id="ky024Badge">ACTIVE</span>
+            <span class="state-badge normal" id="ky024Badge">IDLE</span>
           </div>
 
-          <div class="horizontal-body">
-            <div class="sensor-value-box">
-              <span class="sub-label">Analog Reading:</span>
-              <span class="primary-val mono" id="ky024Val">----</span>
-              <span class="unit">ADC (12-bit)</span>
-            </div>
+          <div class="sensor-value-box">
+            <span class="primary-val mono" id="ky024Val">0</span>
+            <span class="unit">ADC (12-bit)</span>
+          </div>
 
-            <div class="ky024-meta-wrap">
-              <div class="card-bar-wrapper">
-                <div class="bar-labels">
-                  <span>0</span>
-                  <span>12-Bit ADC Range (0 - 4095)</span>
-                  <span>4095</span>
-                </div>
-                <div class="metric-progress-bar">
-                  <div class="bar-fill magnetic-fill" id="ky024BarFill" style="width: 0%;"></div>
-                </div>
-              </div>
-              <p class="sensor-disclaimer">
-                *Note: This raw ADC reading measures magnetic flux changes from the Hall element. It is <strong>not rotational RPM</strong>. Future speed calculation will implement interrupt-driven pulse counting and tachometer calibration.
-              </p>
+          <div class="card-bar-wrapper">
+            <div class="bar-labels">
+              <span>0</span>
+              <span>12-Bit ADC Range (0 - 4095)</span>
+              <span>4095</span>
             </div>
+            <div class="metric-progress-bar">
+              <div class="bar-fill magnetic-fill" id="ky024BarFill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <div class="sensor-footer-meta">
+            <span class="meta-key">Magnetic Flux State:</span>
+            <span class="meta-val mono" id="ky024StateText">Nominal Flux</span>
           </div>
         </article>
       </div>
@@ -859,9 +918,10 @@
               <th scope="col">#</th>
               <th scope="col">Time</th>
               <th scope="col">Motor</th>
+              <th scope="col">RPM</th>
               <th scope="col">Voltage (V)</th>
               <th scope="col">Current (mA)</th>
-              <th scope="col">Power (mW)</th>
+              <th scope="col">Power (W)</th>
               <th scope="col">Motor T (°C)</th>
               <th scope="col">Amb T (°C)</th>
               <th scope="col">Humidity (%)</th>
@@ -872,7 +932,7 @@
           </thead>
           <tbody id="telemetryTableBody">
             <tr class="empty-row" id="tableEmptyRow">
-              <td colspan="12">Waiting for ESP32 connection. Telemetry records will stream here in real time.</td>
+              <td colspan="13">Waiting for ESP32 connection. Telemetry records will stream here in real time.</td>
             </tr>
           </tbody>
         </table>
@@ -889,69 +949,181 @@
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
-          <h3 id="settingsTitle">Threshold & Telemetry Settings</h3>
+          <h3 id="settingsTitle">System Settings & Firmware</h3>
         </div>
         <button type="button" class="modal-close-btn" id="closeSettingsBtn" aria-label="Close modal">&times;</button>
       </div>
 
+      <!-- Tab Navigation -->
+      <div class="modal-tab-bar" role="tablist">
+        <button type="button" class="modal-tab-btn active" data-tab="tabThresholds" id="tabBtnThresholds" role="tab" aria-selected="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="4" y1="21" x2="4" y2="14"/>
+            <line x1="4" y1="10" x2="4" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12" y2="3"/>
+            <line x1="20" y1="21" x2="20" y2="16"/>
+            <line x1="20" y1="12" x2="20" y2="3"/>
+            <line x1="1" y1="14" x2="7" y2="14"/>
+            <line x1="9" y1="8" x2="15" y2="8"/>
+            <line x1="17" y1="16" x2="23" y2="16"/>
+          </svg>
+          <span>Thresholds & Limits</span>
+        </button>
+        <button type="button" class="modal-tab-btn" data-tab="tabFirmware" id="tabBtnFirmware" role="tab" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+          <span>ESP32 Firmware Code</span>
+        </button>
+        <button type="button" class="modal-tab-btn" data-tab="tabTheme" id="tabBtnTheme" role="tab" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+          </svg>
+          <span>Theme & Appearance</span>
+        </button>
+      </div>
+
       <div class="modal-body">
-        <p class="modal-intro">
-          Configure telemetry alert boundaries. Defaults mirror the active ESP32 firmware protection limits. Settings are stored locally in the browser session.
-        </p>
+        <!-- TAB 1: THRESHOLDS & LIMITS -->
+        <div class="tab-pane active" id="tabThresholds" role="tabpanel">
+          <p class="modal-intro">
+            Configure telemetry alert boundaries. Defaults mirror the active ESP32 firmware protection limits. Settings are stored locally in the browser session.
+          </p>
 
-        <form id="settingsForm" class="settings-form">
-          <div class="settings-grid">
-            <div class="form-group">
-              <label for="settingVoltMin">Voltage Low Limit (V)</label>
-              <input type="number" id="settingVoltMin" step="0.1" value="8.0" required>
-              <span class="field-hint">Firmware initial: 8.0 V</span>
+          <form id="settingsForm" class="settings-form">
+            <div class="settings-grid">
+              <div class="form-group">
+                <label for="settingVoltMin">Voltage Low Limit (V)</label>
+                <input type="number" id="settingVoltMin" step="0.1" value="8.0" required>
+                <span class="field-hint">Firmware initial: 8.0 V</span>
+              </div>
+
+              <div class="form-group">
+                <label for="settingVoltMax">Voltage High Limit (V)</label>
+                <input type="number" id="settingVoltMax" step="0.1" value="13.0" required>
+                <span class="field-hint">Firmware initial: 13.0 V</span>
+              </div>
+
+              <div class="form-group">
+                <label for="settingCurrMax">Current Warning (mA)</label>
+                <input type="number" id="settingCurrMax" step="10" value="750.0" required>
+                <span class="field-hint">Firmware initial: 750.0 mA</span>
+              </div>
+
+              <div class="form-group">
+                <label for="settingVibMax">Vibration Score Warning</label>
+                <input type="number" id="settingVibMax" step="1" value="124" required>
+                <span class="field-hint">Firmware initial: 124</span>
+              </div>
+
+              <div class="form-group">
+                <label for="settingTempWarn">Motor Temp Warning (°C)</label>
+                <input type="number" id="settingTempWarn" step="1" value="60.0" required>
+                <span class="field-hint">Firmware initial: 60.0 °C</span>
+              </div>
+
+              <div class="form-group">
+                <label for="settingTempCrit">Motor Temp Critical (°C)</label>
+                <input type="number" id="settingTempCrit" step="1" value="70.0" required>
+                <span class="field-hint">Firmware initial: 70.0 °C</span>
+              </div>
+
+              <div class="form-group">
+                <label for="settingStaleTimeout">Stale Telemetry Timeout (s)</label>
+                <input type="number" id="settingStaleTimeout" step="0.5" min="2" max="30" value="4.0" required>
+                <span class="field-hint">Trigger stale warning if no packet received</span>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label for="settingVoltMax">Voltage High Limit (V)</label>
-              <input type="number" id="settingVoltMax" step="0.1" value="13.0" required>
-              <span class="field-hint">Firmware initial: 13.0 V</span>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline" id="resetDefaultsBtn">Reset to Defaults</button>
+              <div class="modal-save-actions">
+                <button type="button" class="btn btn-outline" id="cancelSettingsBtn">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+              </div>
             </div>
+          </form>
+        </div>
 
-            <div class="form-group">
-              <label for="settingCurrMax">Current Warning (mA)</label>
-              <input type="number" id="settingCurrMax" step="10" value="750.0" required>
-              <span class="field-hint">Firmware initial: 750.0 mA</span>
+        <!-- TAB 2: ESP32 FIRMWARE CODE -->
+        <div class="tab-pane hidden" id="tabFirmware" role="tabpanel">
+          <div class="firmware-toolbar">
+            <div class="firmware-info">
+              <span class="firmware-title">ESP32 / motrivexa_esp32.ino</span>
+              <span class="firmware-tag">115200 Baud &bull; Finalized Working Code</span>
             </div>
-
-            <div class="form-group">
-              <label for="settingVibMax">Vibration Score Warning</label>
-              <input type="number" id="settingVibMax" step="1" value="124" required>
-              <span class="field-hint">Firmware initial: 124</span>
-            </div>
-
-            <div class="form-group">
-              <label for="settingTempWarn">Motor Temp Warning (°C)</label>
-              <input type="number" id="settingTempWarn" step="1" value="60.0" required>
-              <span class="field-hint">Firmware initial: 60.0 °C</span>
-            </div>
-
-            <div class="form-group">
-              <label for="settingTempCrit">Motor Temp Critical (°C)</label>
-              <input type="number" id="settingTempCrit" step="1" value="70.0" required>
-              <span class="field-hint">Firmware initial: 70.0 °C</span>
-            </div>
-
-            <div class="form-group">
-              <label for="settingStaleTimeout">Stale Telemetry Timeout (s)</label>
-              <input type="number" id="settingStaleTimeout" step="0.5" min="2" max="30" value="4.0" required>
-              <span class="field-hint">Trigger stale warning if no packet received</span>
+            <div class="firmware-actions">
+              <button type="button" class="btn btn-primary btn-sm" id="copyFirmwareBtn" title="Copy entire code to clipboard">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span id="copyFirmwareLabel">Copy Code</span>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" id="downloadFirmwareBtn" title="Download .ino file for Arduino IDE">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>Download .INO</span>
+              </button>
             </div>
           </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline" id="resetDefaultsBtn">Reset to Defaults</button>
-            <div class="modal-save-actions">
-              <button type="button" class="btn btn-outline" id="cancelSettingsBtn">Cancel</button>
-              <button type="submit" class="btn btn-primary">Save Settings</button>
-            </div>
+          <p class="firmware-desc">
+            Production ESP32 firmware running on the hardware. Includes INA219, DS18B20, DHT11, KY-024, IR optical RPM sensor, and L298N motor driver at 115200 baud.
+          </p>
+          <div class="firmware-code-container">
+            <pre class="firmware-pre"><code id="firmwareCodeText" class="mono"></code></pre>
           </div>
-        </form>
+        </div>
+
+        <!-- TAB 3: THEME & APPEARANCE -->
+        <div class="tab-pane hidden" id="tabTheme" role="tabpanel">
+          <p class="modal-intro">
+            Switch between dark and light themes for optimal visibility in any presentation or lighting condition.
+          </p>
+          <div class="theme-selection-grid">
+            <button type="button" class="theme-card-option active" id="themeOptDark" data-theme="dark">
+              <div class="theme-card-preview dark-preview">
+                <div class="theme-preview-header">
+                  <span class="preview-dot red"></span><span class="preview-dot yellow"></span><span class="preview-dot green"></span>
+                </div>
+                <div class="theme-preview-body">
+                  <div class="preview-bar accent"></div>
+                  <div class="preview-bar sub"></div>
+                </div>
+              </div>
+              <div class="theme-card-info">
+                <strong>Dark Industrial (Default)</strong>
+                <p>Cyberpunk industrial dark theme optimized for low-glare motor diagnostics.</p>
+              </div>
+            </button>
+            <button type="button" class="theme-card-option" id="themeOptLight" data-theme="light">
+              <div class="theme-card-preview light-preview">
+                <div class="theme-preview-header">
+                  <span class="preview-dot red"></span><span class="preview-dot yellow"></span><span class="preview-dot green"></span>
+                </div>
+                <div class="theme-preview-body">
+                  <div class="preview-bar accent"></div>
+                  <div class="preview-bar sub"></div>
+                </div>
+              </div>
+              <div class="theme-card-info">
+                <strong>Light Industrial</strong>
+                <p>High-contrast, clean daylight theme for reviews, bright screens, and reports.</p>
+              </div>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -963,7 +1135,7 @@
         <strong>MOTRIVEXA</strong> &mdash; Smart Predictive Health Monitoring and Protection System for Industrial Electric Motors
       </div>
       <div class="footer-right">
-        <span>Hardware: ESP32 + INA219 + MPU6050 + DS18B20 + DHT11 + KY-024</span>
+        <span>Hardware: ESP32 + INA219 + DS18B20 + DHT11 + IR Speed Sensor + KY-024</span>
       </div>
     </div>
   </footer>
